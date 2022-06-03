@@ -61,6 +61,8 @@ Ci:
 * [ ] move src/lib.rs tests to dedicated tests/ folder 
 
 Hatanaka:
+* [ ] Provide compress() [RNX2CRX operation]
+* [ ] Create Header::CRINEX infos accordingly
 * [ ] find some CRINEX with special epoch events (flag>2) and test them
 * [ ] CRINEX 1|3 special epoch content (flag>2)
 will be mishandled / corrupted if they are not only made of COMMENTS

@@ -217,7 +217,9 @@ pub enum Error {
     #[error("io error")]
     IoError(#[from] std::io::Error),
     #[error("this is not a crinex file")]
-    NotACrinexError,
+    NotACrinex,
+    #[error("this is not a rinex file")]
+    NotARinex,
     #[error("this is not an observation file")]
     NotObsRinexData,
     #[error("non supported crinex revision")]
@@ -237,7 +239,7 @@ pub enum Error {
 }
 
 /// Structure to decompress a CRINEX file
-pub struct Decompressor {
+pub struct Hatanaka {
     /// to identify very first few bytes passed
     first_epo : bool,
     /// to determine where we are in the record
@@ -254,7 +256,7 @@ pub struct Decompressor {
     sv_krn  : HashMap<sv::Sv, Vec<(Kernel, Kernel, Kernel)>>,
 }
 
-impl Decompressor {
+impl Hatanaka {
     /// Creates a new `CRINEX` decompressor tool
     pub fn new (max_order: usize) -> Decompressor {
         Decompressor {
@@ -285,7 +287,7 @@ impl Decompressor {
     pub fn decompress (&mut self, header: &header::Header, content : &str) -> Result<String, Error> {
         // Context sanity checks
         if !header.is_crinex() {
-            return Err(Error::NotACrinexError)
+            return Err(Error::NotACrinex)
         }
         if header.rinex_type != Type::ObservationData {
             return Err(Error::NotObsRinexData)
@@ -706,6 +708,43 @@ impl Decompressor {
         Ok(self.epo_krn.recover(Dtype::Text(line.to_string()))?
             .as_text()
             .unwrap())
+    }
+    /// Compresses RINEX content in similar rolling fashion as `decompress()`
+    pub fn compress (&mut self, header: &header::Header, content: &str) -> Result<String, Error> {
+        // basic sanity checks
+        if header.rinex_type != Type::ObservationData {
+            return Err(Error::NotObsRinexData)
+        }
+        // grab useful information for later
+        let rnx_version = &header.version;
+        let obs_codes = header.obs_codes
+            .as_ref()
+            .unwrap();
+        
+        // pre defined maximal compression order
+        //  ===> to adapt all other kernels accordingly
+        let m = self.clk_krn.state.len()-1; 
+
+        // iterate through content
+        let mut lines = content.lines();
+        loop {
+            let line : &str = match lines.next() {
+                Some(l) => l,
+                None => break,
+            };
+
+            if self.header {
+                self.epoch_descriptor_compression(rnx_version.major, &line)?;
+                self.header = false;
+                self.clock_offset = true;
+                continue
+            }
+
+            if self.clock_offset {
+                self.clock_offset = false;
+                continue
+            }
+        }
     }
 }
 
