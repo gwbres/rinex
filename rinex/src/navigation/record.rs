@@ -88,12 +88,102 @@ impl ComplexEnum {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+#[derive(PartialEq, PartialOrd)]
+pub struct StoMessage {
+    
+}
+
+/// Possible Navigation Frame declinations for an epoch
+#[derive(Debug, Clone)]
+#[derive(PartialEq, PartialOrd)]
+#[derive(EnumString)]
+#[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
+pub enum FrameClass {
+    #[strum(serialize = "EPH", deserialize = "EPH")]
+    Ephemeris,
+    #[strum(serialize = "STO", deserialize = "STO")]
+    SystemTimeOffset,
+    #[strum(serialize = "EOP", deserialize = "EOP")]
+    EarthOrientation,
+    #[strum(serialize = "ION", deserialize = "ION")]
+    IonosphericModel,
+}
+
+impl Default for FrameClass {
+    fn default() -> Self{
+        Self::Ephemeris
+    }
+}
+
+impl std::fmt::Display for FrameClass {
+    fn fmt (&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Ephemeris => f.write_str("EPH"),
+            Self::SystemTimeOffset => f.write_str("STO"),
+            Self::EarthOrientation => f.write_str("EOP"),
+            Self::IonosphericModel => f.write_str("ION"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+#[derive(PartialEq, PartialOrd)]
+#[derive(Eq, Ord)]
+#[derive(EnumString)]
+/// Navigation Frame for a given epoch
+pub enum Frame {
+    /// Ephemeris are sorted by Space vehicule,
+    /// and by description codes. To determine existing
+    /// description coddes, refer to RINEX specifications,
+    /// or db/NAV/navigation.json. "clockBias", "clockDrift"
+    /// and "clockDriftRate" are the only common description codes.
+    /// Other, like "iode", "crs", "cus".. are constellation
+    /// and revision dependent.
+    Eph(BTreeMap<Sv, HashMap<String, ComplexEnum>>),
+    /// System Time Offset message
+    Sto(StoMessage),
+    /// Earth Orientation Parameters
+    Eop(EopMessage),
+    /// Ionospheric Model Message
+    Ion(IonMessage),
+}
+
+impl Frame {
+    /// Unwraps self as Ephemeris frame 
+    pub fn as_eph (&self) -> Option<&BTreeMap<Sv, HashMap<String, ComplexEnum>>> {
+        match self {
+            Self::Eph(fr) => Some(fr),
+            _ => None,
+        }
+    }
+    /// Unwraps self as System Time Offset frame
+    pub fn as_sto (&self) -> Option<&StoMessage> {
+        match self {
+            Self::Sto(fr) => Some(fr),
+            _ => None,
+        }
+    }
+    /// Unwraps self as Earth Orientation parameters frame
+    pub fn as_eop (&self) -> Option<&EopMessage> {
+        match self {
+            Self::Eop(fr) => Some(fr),
+            _ => None,
+        }
+    }
+    /// Unwraps self as Ionospheric Model frame
+    pub fn as_ion (&self) -> Option<&IonMessage> {
+        match self {
+            Self::Ion(fr) => Some(fr),
+            _ => None,
+        }
+    }
+}
+
 /// Navigation Record.
-/// Data is sorted by epoch, by Space Vehicule
-/// and by standardized identification code.
-/// Data is in the form of `ComplexEnum`, refer to related
-/// enum documentation.
-pub type Record = BTreeMap<epoch::Epoch, HashMap<sv::Sv, HashMap<String, ComplexEnum>>>;
+/// Data is sorted by epoch, and by Frame class.
+pub type Record = BTreeMap<epoch::Epoch, BTreeMap<FrameClass, Frame>>;
 
 /// Returns true if given content matches the beginning of a 
 /// Navigation record epoch
@@ -393,9 +483,9 @@ mod test {
         assert_eq!(is_new_epoch(line, version::Version::new(3, 0)), true);
         assert_eq!(is_new_epoch(line, version::Version::new(4, 0)), false);
         // NAV V4
-        let line = "R21 2022 01 01 09 15 00-2.666609361768E-04-2.728484105319E-12 5.508000000000E+05";
-        assert_eq!(is_new_epoch(line, version::Version::new(4, 0)), false);
-        let line = "> R21 2022 01 01 09 15 00-2.666609361768E-04-2.728484105319E-12 5.508000000000E+05";
+        let line = "> EPH G02 LNAV";
+        assert_eq!(is_new_epoch(line, version::Version::new(2, 0)), false);
+        assert_eq!(is_new_epoch(line, version::Version::new(3, 0)), false);
         assert_eq!(is_new_epoch(line, version::Version::new(4, 0)), true);
     }
 }
