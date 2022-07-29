@@ -210,6 +210,6 @@ mod test {
  1000 1000 1000 1000 1000 1000 1000 1000                                        
      5                                                      END OF TEC MAP     "; 
         let entry = build_record_entry(content, -1);
-        println!("{:#?}", entry);
+        //println!("{:#?}", entry);
     }
 }
