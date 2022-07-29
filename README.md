@@ -133,3 +133,4 @@ Follow the existing architecture:
 - [ ] Something to do with EpochFlag::HeaderInformationFollows flag
 and smart header update ?
 - [ ] Cycle Slip Events ?
+- [ ] NAV/GAL Orbit5/ComplexEnum: provide a flag like type for "data-source"
