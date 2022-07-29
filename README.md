@@ -32,7 +32,7 @@ and the [rinex](rinex/) crate.
 | `NavigationData` (NAV)   | V2, V3            |   V4               |  :heavy_check_mark:    | :construction:       |:construction: | `epoch` iteration |
 | `ObservationData` (OBS)  | :heavy_check_mark:| :heavy_minus_sign: |  :heavy_check_mark:    | :construction:       |:construction: | `epoch` iteration |
 | `CRINEX` (Compressed OBS)| :heavy_check_mark:| :heavy_minus_sign: |  :heavy_check_mark:    | :construction:       |:construction: | `epoch` iteration |
-| `MeteoData` (MET)        | V2, V3            |   V4               |  :heavy_check_mark:    | :heavy_minus_sign:   |:heavy_check_mark: | `epoch` iteration |  
+| `MeteoData` (MET)        | :heavy_check_mark:| :heavy_minus_sign: |  :heavy_check_mark:    | :heavy_minus_sign:   |:heavy_check_mark: | `epoch` iteration |  
 | `ClocksData` (CLK)       | V3                |   V4               |  :construction:        | :question:           |:construction: | `epoch` iteration |
 | `AntennaData` (ATX)      | :heavy_check_mark:| :heavy_minus_sign: |  :construction:        | :heavy_minus_sign:   |:construction: | `ATX` records are not indexed by `epochs` |
 | `IonosphereMaps` (IONEX) | :construction:    |                    |  :construction:        | :question:           |:construction: | `epoch` iteration |

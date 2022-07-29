@@ -445,6 +445,27 @@ impl Header {
                 if let Ok(sensor) = meteo::sensor::Sensor::from_str(content) {
                     met_sensors.push(sensor)
                 }
+            } else if marker.contains("SENSOR POS XYZ/H") {
+                let (x_str, rem) = content.split_at(14);
+                let (y_str, rem) = rem.split_at(14);
+                let (z_str, rem) = rem.split_at(14);
+                let (h_str, phys_str) = rem.split_at(14);
+                if let Ok(observable) = meteo::observable::Observable::from_str(phys_str.trim()) {
+                    for sensor in met_sensors.iter_mut() {
+                        if sensor.observable == observable {
+                            if let Ok(x) = f64::from_str(x_str.trim()) {
+                                if let Ok(y) = f64::from_str(y_str.trim()) {
+                                    if let Ok(z) = f64::from_str(z_str.trim()) {
+                                        if let Ok(h) = f64::from_str(h_str.trim()) {
+                                            *sensor = sensor.
+                                                with_position((x,y,z,h))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             
             } else if marker.contains("ANT # / TYPE") {
                 let (model, rem) = content.split_at(20);

@@ -16,21 +16,20 @@ pub type Record = BTreeMap<epoch::Epoch, HashMap<Observable, f32>>;
 
 /// Returns true if given line matches a new Meteo Record `epoch`
 pub fn is_new_epoch (line: &str, v: version::Version) -> bool {
-    if v.major > 3 {
-        // modern, easy parsing,
-        match line.chars().nth(0) {
-            Some(c) => {
-                c == '>' // epochs always delimited 
-                    // by this new identifier
-            },
-            _ => false,
-        }
-    } else {
-        if line.len() < 16 {
+    if v.major < 4 {
+        let min_len = " 15  1  1  0  0  0";
+        if line.len() < min_len.len() { // minimum epoch descriptor 
             return false
         }
-        let datestr = &line[1..18];
-        epoch::str2date(datestr).is_ok()
+        let datestr = &line[1..min_len.len()]; 
+        epoch::str2date(datestr).is_ok() // valid epoch descriptor
+    } else {
+        let min_len = " 2021  1  7  0  0  0";
+        if line.len() < min_len.len() { // minimum epoch descriptor
+            return false
+        }
+        let datestr = &line[1..min_len.len()]; 
+        epoch::str2date(datestr).is_ok() // valid epoch descriptor
     }
 }
 
@@ -193,14 +192,11 @@ mod test {
                 major: 2,
                 minor: 0,
             }), true);
+        let content = " 2021  1  7  0  0  0  993.3   23.0   90.0";
+        assert_eq!(is_new_epoch(content,
+            version::Version {
+                major: 4,
+                minor: 0,
+            }), true);
     }
-/*
-    #[test]
-    fn test_record_entry() {
-        let content = " 08  1  1  0  0  1 1018.0   25.1   75.9    1.4   95.0    0.0    0.0";
-        let entry = build_record_entry(content);
-pub fn build_record_entry (header: &Header, content: &str) 
-        -> Result<(epoch::Epoch, HashMap<Observable, f32>), Error> 
-
-    }*/
 }

@@ -12,7 +12,7 @@ pub struct Sensor {
 	/// Type of sensor
 	pub sensor_type: String,
 	/// Sensor accuracy [°C,..]
-	pub accuracy: f32,
+	pub accuracy: Option<f32>,
 	/// Physics measured by this sensor
 	pub observable: Observable,
     /// Posible sensor location (ECEF) and possible
@@ -34,7 +34,7 @@ impl Default for Sensor {
             model: String::new(),
             sensor_type: String::new(),
             observable: Observable::default(), 
-            accuracy: 0.0_f32,
+            accuracy: None,
             position: None,
         }
     }
@@ -48,9 +48,27 @@ impl std::str::FromStr for Sensor {
         let (accuracy, rem) = rem.split_at(7 +4);
         let (observable, _) = rem.split_at(2);
         Ok(Self {
-            model: model.trim().to_string(),
-            sensor_type: s_type.trim().to_string(),
-            accuracy: f32::from_str(accuracy.trim())?,
+            model: {
+                if model.trim().len() == 0 {
+                    String::from("Unknown")
+                } else {
+                    model.trim().to_string()
+                }
+            },
+            sensor_type: {
+                if s_type.trim().len() == 0 {
+                    String::from("Unknown")
+                } else {
+                    s_type.trim().to_string()
+                }
+            },
+            accuracy: {
+                if let Ok(f) = f32::from_str(accuracy.trim()) {
+                    Some(f)
+                } else {
+                    None
+                }
+            },
             observable: Observable::from_str(observable.trim())?, 
             position: None,
         })
@@ -61,7 +79,11 @@ impl std::fmt::Display for Sensor {
     fn fmt (&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{:<20}", self.model)?; 
         write!(f, "{:<30}", self.sensor_type)?; 
-        write!(f, "{:1.1}", self.accuracy)?; 
+        if let Some(acc) = self.accuracy {
+            write!(f, "{:1.1}", acc)?;
+        } else {
+            write!(f, "  ")?;
+        }
         write!(f, "    {} ", self.observable)?;
         write!(f, "SENSOR MOD/TYPE/ACC\n")?;
         if let Some((x,y,z,h)) = self.position {
@@ -89,14 +111,12 @@ mod test {
         let s = Sensor::from_str("                                                  0.0    PR ");
         assert_eq!(s.is_ok(), true);
         let s = s.unwrap();
-        assert_eq!(s.model, "");
-        assert_eq!(s.sensor_type, "");
-        assert_eq!(s.accuracy, 0.0);
+        assert_eq!(s.model, "Unknown");
+        assert_eq!(s.sensor_type, "Unknown");
+        assert_eq!(s.accuracy, Some(0.0));
 
         let s = Sensor::from_str("PAROSCIENTIFIC      740-16B                       0.2    PR SENSOR MOD/TYPE/ACC");
         assert_eq!(s.is_ok(), true);
-        let s = Sensor::from_str("UNKNOWN             123-456                       a.b    TD ");
-        assert_eq!(s.is_err(), true);
         let s = Sensor::from_str("                                                  0.0    PR SENSOR MOD/TYPE/ACC");
         assert_eq!(s.is_ok(), true);
     }
