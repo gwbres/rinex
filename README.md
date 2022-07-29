@@ -2,6 +2,7 @@ RINEX
 =====
 
 [![Rust](https://github.com/gwbres/rinex/actions/workflows/rust.yml/badge.svg)](https://github.com/gwbres/rinex/actions/workflows/rust.yml)
+[![Audit](https://github.com/gwbres/rinex/actions/workflows/Audit.yml/badge.svg)](https://github.com/gwbres/rinex/actions/workflows/Audit.yml)
 [![crates.io](https://docs.rs/rinex/badge.svg)](https://docs.rs/rinex/badge.svg)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](https://github.com/gwbres/rinex/blob/main/LICENSE-APACHE)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/gwbres/rinex/blob/main/LICENSE-MIT) 
