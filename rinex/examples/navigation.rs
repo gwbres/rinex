@@ -60,10 +60,10 @@ fn main() {
     
     // ----> zoom in on `E01` vehicule for that particular `epoch` 
     let to_match = sv::Sv::new(Constellation::Galileo, 1);
-    let matched = &matched[&to_match];
+    //let matched = &matched[&to_match];
     println!("\n------------- Adding Sv filter \"{:?}\" to previous epoch filter ----------\n{:#?}", to_match, matched); 
     // ----> zoom in on `E01` clock drift for that `epoch`
-    let matched = &matched["ClockDrift"];
+    //let matched = &matched["ClockDrift"];
     println!("\n------------- \"clockDrift\" data from previous set ----------\n{:#?}", matched); 
     
     ///////////////////////////////////////////////////
@@ -84,6 +84,7 @@ fn main() {
     
     // extract all data for `R24` vehicule 
     let to_match = sv::Sv::new(Constellation::Glonass, 24);
+    /*
     let matched : Vec<_> = record
         .iter()
         .map(|(_epoch, sv)| { // dont care about epoch, sv filter
@@ -136,5 +137,5 @@ fn main() {
         .collect();
     println!("\n------------- \"{:?}\" (PosX,PosY,PosZ)----------\n{:#?}", to_match, data); 
 
-    //
+    */
 }
