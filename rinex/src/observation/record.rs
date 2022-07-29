@@ -324,7 +324,7 @@ pub fn build_record_entry (header: &header::Header, content: &str)
                             'R' => Constellation::Glonass,
                             'J' => Constellation::QZSS,
                             'E' => Constellation::Galileo,
-                            'C' => Constellation::Beidou,
+                            'C' => Constellation::BeiDou,
                             'S' => Constellation::SBAS(Augmentation::default()),
                             _ => return Err(
                                 Error::SvError(
@@ -464,7 +464,7 @@ pub fn build_record_entry (header: &header::Header, content: &str)
 				'R' => Constellation::Glonass,
 				'J' => Constellation::QZSS,
 				'E' => Constellation::Galileo,
-				'C' => Constellation::Beidou,
+				'C' => Constellation::BeiDou,
 				//'H' => Constellation::SBAS(Augmentation::default()),
                 'S' => Constellation::SBAS(Augmentation::default()),
 				_ => return Err(
