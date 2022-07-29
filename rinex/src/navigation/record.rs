@@ -19,7 +19,7 @@ use crate::navigation::ionmessage;
 /// `ComplexEnum` is record payload 
 #[derive(Clone, Debug)]
 #[derive(PartialEq, PartialOrd)]
-#[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "with-serde", derive(Serialize))]
 pub enum ComplexEnum {
     U8(u8),
     Str(String), 
@@ -95,11 +95,11 @@ impl ComplexEnum {
 }
 
 /// Possible Navigation Frame declinations for an epoch
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 #[derive(PartialEq, PartialOrd)]
 #[derive(Eq, Ord)]
 #[derive(EnumString)]
-#[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "with-serde", derive(Serialize))]
 pub enum FrameClass {
     #[strum(serialize = "EPH", deserialize = "EPH")]
     Ephemeris,
@@ -130,11 +130,11 @@ impl std::fmt::Display for FrameClass {
 
 
 /// Navigation Message Types 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 #[derive(PartialEq, PartialOrd)]
 #[derive(Eq, Ord)]
 #[derive(EnumString)]
-#[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "with-serde", derive(Serialize))]
 pub enum MsgType {
     /// Legacy NAV
     LNAV,
@@ -159,7 +159,7 @@ impl Default for MsgType {
 /// Navigation Frame for a given epoch
 #[derive(Debug, Clone)]
 #[derive(EnumString)]
-#[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "with-serde", derive(Serialize))]
 pub enum Frame {
     /// Ephemeris for a given Vehicule `Sv`,
     /// with vehicule internal clock bias, clock drift and clock drift rate.
@@ -177,16 +177,16 @@ pub enum Frame {
 
 impl Frame {
     /// Unwraps self as Ephemeris frame
-    pub fn as_eph (&self) -> Option<(&MsgType, &Sv, &f64, &f64, &f64, &HashMap<String, ComplexEnum>)> {
+    pub fn as_eph (&self) -> Option<(MsgType, Sv, f64, f64, f64, &HashMap<String, ComplexEnum>)> {
         match self {
-            Self::Eph(msg, sv, clk, clk_dr, clk_drr, map) => Some((msg, sv, clk, clk_dr, clk_drr, map)),
+            Self::Eph(msg, sv, clk, clk_dr, clk_drr, map) => Some((*msg, *sv, *clk, *clk_dr, *clk_drr, map)),
             _ => None,
         }
     }
     /// Unwraps self as Ephemeris frame
-    pub fn as_mut_eph (&mut self) -> Option<(&mut MsgType, &mut Sv, &mut f64, &mut f64, &mut f64, &mut HashMap<String, ComplexEnum>)> {
+    pub fn as_mut_eph (&mut self) -> Option<(MsgType, Sv, f64, f64, f64, &HashMap<String, ComplexEnum>)> {
         match self {
-            Self::Eph(msg, sv, clk, clk_dr, clk_drr, map) => Some((msg, sv, clk, clk_dr, clk_drr, map)),
+            Self::Eph(msg, sv, clk, clk_dr, clk_drr, map) => Some((*msg, *sv, *clk, *clk_dr, *clk_drr, map)),
             _ => None,
         }
     }
@@ -299,13 +299,25 @@ fn build_v2_v3_record_entry (version: Version, constell: Constellation, content:
     
     let version_major = version.major;
     let svnn_offset :usize = match version.major {
-        1|2 => 3,
+        1|2 => {
+            if constell == Constellation::Mixed { // not sure that even exists
+                4
+            } else {
+                3
+            }
+        },
         3 => 4,
         _ => unreachable!(),
     };
 
     let (svnn, rem) = line.split_at(svnn_offset);
-    let (date, rem) = rem.split_at(20);
+
+    let date_offset = match svnn_offset {
+        4 => 19,
+        _ => 20,
+    };
+    
+    let (date, rem) = rem.split_at(date_offset);
     let (clk_bias, rem) = rem.split_at(19);
     let (clk_dr, clk_drr) = rem.split_at(19);
 
@@ -314,19 +326,26 @@ fn build_v2_v3_record_entry (version: Version, constell: Constellation, content:
 
     let sv : Sv = match version.major {
         1|2 => {
-            Sv {
-                constellation: constell,
-                prn: u8::from_str_radix(svnn, 10)?,
+            match constell {
+                Constellation::Mixed => { // not sure that even exists
+                    Sv::from_str(svnn.trim())?
+                },
+                _ => {
+                    Sv {
+                        constellation: constell.clone(),
+                        prn: u8::from_str_radix(svnn.trim(), 10)?,
+                    }
+                },
             }
         },
-        3 => Sv::from_str(svnn)?,
+        3 => Sv::from_str(svnn.trim())?,
         _ => unreachable!(),
     };
 
-    let clk = f64::from_str(clk_bias.trim())?;
-    let clk_dr = f64::from_str(clk_dr.trim())?;
-    let clk_drr = f64::from_str(clk_drr.trim())?;
-    let map = parse_complex_map(version, constell, lines)?;
+    let clk = f64::from_str(clk_bias.replace("D","E").trim())?;
+    let clk_dr = f64::from_str(clk_dr.replace("D","E").trim())?;
+    let clk_drr = f64::from_str(clk_drr.replace("D","E").trim())?;
+    let map = parse_complex_map(version, sv.constellation, lines)?;
     let fr = Frame::Eph(MsgType::LNAV, sv, clk, clk_dr, clk_drr, map); // indicate legacy frame
     Ok((
         epoch::Epoch::new(
@@ -375,6 +394,7 @@ fn parse_complex_map (version: Version, constell: Constellation, mut lines: std:
     let mut map :HashMap<String, ComplexEnum> = HashMap::new();
     for item in items.iter() {
         let (k, v) = item;
+        println!("key {}", k);
         let offset :usize = match new_line {
             false => 19,
             true => {
@@ -386,20 +406,30 @@ fn parse_complex_map (version: Version, constell: Constellation, mut lines: std:
                 }
             },
         };
-        total += offset;
-        let (content, rem) = line.split_at(offset);
-        line = rem.clone();
+        if line.len() >= 19 { // handle empty fields, that might exist..
+            let (content, rem) = line.split_at(offset);
+            total += offset;
+            line = rem.clone();
 
-        if k.eq(&"spare") { // --> got something to parse in db
-            let cplx = ComplexEnum::new(v, content.trim())?;
-            map.insert(k.to_string(), cplx);
-        }
+            if !k.contains(&"spare") { // --> got something to parse in db
+                let cplx = ComplexEnum::new(v, content.trim())?;
+                map.insert(k.to_string(), cplx);
+            }
 
-        if total >= 76 {
-            new_line = true;
+            if total >= 76 {
+                new_line = true;
+                total = 0;
+                if let Some(l) = lines.next() {
+                    line = l;
+                } else {
+                    break
+                }
+            }
+        } else { // early EOL
             total = 0;
+            new_line = true;
             if let Some(l) = lines.next() {
-                line = l;
+                line = l
             } else {
                 break
             }
@@ -473,42 +503,559 @@ mod test {
     fn test_is_new_epoch() {
         // NAV V<3
         let line = " 1 20 12 31 23 45  0.0 7.282570004460D-05 0.000000000000D+00 7.380000000000D+04";
-        assert_eq!(is_new_epoch(line, version::Version::new(1, 0)), true);
-        assert_eq!(is_new_epoch(line, version::Version::new(2, 0)), true);
-        assert_eq!(is_new_epoch(line, version::Version::new(3, 0)), false);
-        assert_eq!(is_new_epoch(line, version::Version::new(4, 0)), false);
+        assert_eq!(is_new_epoch(line, Version::new(1, 0)), true);
+        assert_eq!(is_new_epoch(line, Version::new(2, 0)), true);
+        assert_eq!(is_new_epoch(line, Version::new(3, 0)), false);
+        assert_eq!(is_new_epoch(line, Version::new(4, 0)), false);
         // NAV V<3
         let line = " 2 21  1  1 11 45  0.0 4.610531032090D-04 1.818989403550D-12 4.245000000000D+04";
-        assert_eq!(is_new_epoch(line, version::Version::new(1, 0)), true);
-        assert_eq!(is_new_epoch(line, version::Version::new(2, 0)), true);
-        assert_eq!(is_new_epoch(line, version::Version::new(3, 0)), false);
-        assert_eq!(is_new_epoch(line, version::Version::new(4, 0)), false);
+        assert_eq!(is_new_epoch(line, Version::new(1, 0)), true);
+        assert_eq!(is_new_epoch(line, Version::new(2, 0)), true);
+        assert_eq!(is_new_epoch(line, Version::new(3, 0)), false);
+        assert_eq!(is_new_epoch(line, Version::new(4, 0)), false);
         // GPS NAV V<3
         let line = " 3 17  1 13 23 59 44.0-1.057861372828D-04-9.094947017729D-13 0.000000000000D+00";
-        assert_eq!(is_new_epoch(line, version::Version::new(1, 0)), true);
-        assert_eq!(is_new_epoch(line, version::Version::new(2, 0)), true);
-        assert_eq!(is_new_epoch(line, version::Version::new(3, 0)), false);
-        assert_eq!(is_new_epoch(line, version::Version::new(4, 0)), false);
+        assert_eq!(is_new_epoch(line, Version::new(1, 0)), true);
+        assert_eq!(is_new_epoch(line, Version::new(2, 0)), true);
+        assert_eq!(is_new_epoch(line, Version::new(3, 0)), false);
+        assert_eq!(is_new_epoch(line, Version::new(4, 0)), false);
         // NAV V3
         let line = "C05 2021 01 01 00 00 00-4.263372393325e-04-7.525180478751e-11 0.000000000000e+00";
-        assert_eq!(is_new_epoch(line, version::Version::new(1, 0)), false);
-        assert_eq!(is_new_epoch(line, version::Version::new(2, 0)), false);
-        assert_eq!(is_new_epoch(line, version::Version::new(3, 0)), true);
-        assert_eq!(is_new_epoch(line, version::Version::new(4, 0)), false);
+        assert_eq!(is_new_epoch(line, Version::new(1, 0)), false);
+        assert_eq!(is_new_epoch(line, Version::new(2, 0)), false);
+        assert_eq!(is_new_epoch(line, Version::new(3, 0)), true);
+        assert_eq!(is_new_epoch(line, Version::new(4, 0)), false);
         // NAV V3
         let line = "R21 2022 01 01 09 15 00-2.666609361768E-04-2.728484105319E-12 5.508000000000E+05";
-        assert_eq!(is_new_epoch(line, version::Version::new(1, 0)), false);
-        assert_eq!(is_new_epoch(line, version::Version::new(2, 0)), false);
-        assert_eq!(is_new_epoch(line, version::Version::new(3, 0)), true);
-        assert_eq!(is_new_epoch(line, version::Version::new(4, 0)), false);
+        assert_eq!(is_new_epoch(line, Version::new(1, 0)), false);
+        assert_eq!(is_new_epoch(line, Version::new(2, 0)), false);
+        assert_eq!(is_new_epoch(line, Version::new(3, 0)), true);
+        assert_eq!(is_new_epoch(line, Version::new(4, 0)), false);
         // NAV V4
         let line = "> EPH G02 LNAV";
-        assert_eq!(is_new_epoch(line, version::Version::new(2, 0)), false);
-        assert_eq!(is_new_epoch(line, version::Version::new(3, 0)), false);
-        assert_eq!(is_new_epoch(line, version::Version::new(4, 0)), true);
+        assert_eq!(is_new_epoch(line, Version::new(2, 0)), false);
+        assert_eq!(is_new_epoch(line, Version::new(3, 0)), false);
+        assert_eq!(is_new_epoch(line, Version::new(4, 0)), true);
     }
     #[test]
-    fn test_old_record_entry() {
-        let entry = build_record_entry(content);
+    fn test_v2_glonass_entry() {
+        let content =
+" 1 20 12 31 23 45  0.0 7.282570004460D-05 0.000000000000D+00 7.380000000000D+04
+   -1.488799804690D+03-2.196182250980D+00 3.725290298460D-09 0.000000000000D+00
+    1.292880712890D+04-2.049269676210D+00 0.000000000000D+00 1.000000000000D+00
+    2.193169775390D+04 1.059645652770D+00-9.313225746150D-10 0.000000000000D+00";
+        let version = Version::new(2, 0);
+        let entry = build_record_entry(version, Constellation::Glonass, content);
+        assert_eq!(entry.is_ok(), true);
+        let (epoch, class, frame) = entry.unwrap();
+        assert_eq!(epoch, Epoch {
+            date: epoch::str2date("20 12 31 23 45  0.0").unwrap(),
+            flag: epoch::EpochFlag::Ok,
+        });
+        assert_eq!(class, FrameClass::Ephemeris);
+        let fr = frame.as_eph();
+        assert_eq!(fr.is_some(), true);
+        let (msg_type, sv, clk, clk_dr, clk_drr, map) = fr.unwrap();
+        assert_eq!(msg_type, MsgType::LNAV);
+        assert_eq!(sv, Sv {
+            constellation: Constellation::Glonass,
+            prn: 1,
+        });
+        assert_eq!(clk, 7.282570004460E-05);
+        assert_eq!(clk_dr, 0.0); 
+        assert_eq!(clk_drr, 7.38E4);
+        assert_eq!(map.len(), 12);
+        for (k, v) in map.iter() {
+            if k.eq("satPosX") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, -1.488799804690E+03);
+            } else if k.eq("velX") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, -2.196182250980E+00);
+            } else if k.eq("accelX") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 3.725290298460E-09);
+            } else if k.eq("health") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.0);
+            } else if k.eq("satPosY") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 1.292880712890E+04);
+            } else if k.eq("velY") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, -2.049269676210E+00);
+            } else if k.eq("accelY") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.0);
+            } else if k.eq("freqNum") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 1.0);
+            } else if k.eq("satPosZ") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 2.193169775390E+04);
+            } else if k.eq("velZ") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 1.059645652770E+00);
+            } else if k.eq("accelZ") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, -9.313225746150E-10);
+            } else if k.eq("ageOp") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.0);
+            } else { 
+                panic!("Got unexpected key \"{}\" for GLOV2 record", k);
+            }
+        }
     }
+    #[test]
+    fn test_v3_beidou_entry() {
+        let content =
+"C05 2021 01 01 00 00 00 -.426337239332e-03 -.752518047875e-10  .000000000000e+00
+      .100000000000e+01  .118906250000e+02  .105325815814e-08 -.255139531119e+01
+      .169500708580e-06  .401772442274e-03  .292365439236e-04  .649346986580e+04
+      .432000000000e+06  .105705112219e-06 -.277512444499e+01 -.211410224438e-06
+      .607169709798e-01 -.897671875000e+03  .154887266488e+00 -.871464871438e-10
+     -.940753471872e-09  .000000000000e+00  .782000000000e+03  .000000000000e+00
+      .200000000000e+01  .000000000000e+00 -.599999994133e-09 -.900000000000e-08
+      .432000000000e+06  .000000000000e+00 0.000000000000e+00 0.000000000000e+00";
+        let version = Version::new(3, 0);
+        let entry = build_record_entry(version, Constellation::Mixed, content);
+        assert_eq!(entry.is_ok(), true);
+        let (epoch, class, frame) = entry.unwrap();
+        assert_eq!(epoch, Epoch {
+            date: epoch::str2date("2021 01 01 00 00 00").unwrap(),
+            flag: epoch::EpochFlag::Ok,
+        });
+        assert_eq!(class, FrameClass::Ephemeris);
+        let fr = frame.as_eph();
+        assert_eq!(fr.is_some(), true);
+        let (msg_type, sv, clk, clk_dr, clk_drr, map) = fr.unwrap();
+        assert_eq!(msg_type, MsgType::LNAV);
+        assert_eq!(sv, Sv {
+            constellation: Constellation::BeiDou,
+            prn: 5,
+        });
+        assert_eq!(clk, -0.426337239332E-03); 
+        assert_eq!(clk_dr, -0.752518047875e-10); 
+        assert_eq!(clk_drr, 0.0);
+        assert_eq!(map.len(), 24);
+        for (k, v) in map.iter() {
+            if k.eq("aode") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.100000000000e+01);
+            } else if k.eq("crs") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.118906250000e+02);
+            } else if k.eq("deltaN") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.105325815814e-08);
+            } else if k.eq("m0") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, -0.255139531119e+01);
+            
+            } else if k.eq("cuc") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.169500708580e-06);
+            } else if k.eq("e") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.401772442274e-03);
+            } else if k.eq("cus") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.292365439236e-04); 
+            } else if k.eq("sqrta") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.649346986580e+04);
+            
+            } else if k.eq("toe") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.432000000000e+06); 
+            } else if k.eq("cic") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.105705112219e-06);
+            } else if k.eq("omega0") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, -0.277512444499e+01);
+            } else if k.eq("cis") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, -0.211410224438e-06);
+            
+            } else if k.eq("i0") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.607169709798e-01);
+            } else if k.eq("crc") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, -0.897671875000e+03); 
+            } else if k.eq("omega") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.154887266488e+00);
+            } else if k.eq("omegaDot") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, -0.871464871438e-10);
+            
+            } else if k.eq("idot") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, -0.940753471872e-09);
+            // SPARE
+            } else if k.eq("bdtWeek") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.782000000000e+03); 
+            //SPARE
+            
+            } else if k.eq("svAccuracy") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.200000000000e+01); 
+            } else if k.eq("satH1") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.000000000000e+00);
+            } else if k.eq("tgd1b1b3") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, -0.599999994133e-09);
+            } else if k.eq("tgd2b2b3") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, -0.900000000000e-08);
+            
+            } else if k.eq("t_tm") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.432000000000e+06); 
+            } else if k.eq("oadc") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.000000000000e+00); 
+            } else { 
+                panic!("Got unexpected key \"{}\" for BDSV3 record", k);
+            }
+        }
+    }
+    #[test]
+    fn test_v3_galileo_entry() {
+        let content =
+"E01 2021 01 01 10 10 00 -.101553811692e-02 -.804334376880e-11  .000000000000e+00
+      .130000000000e+02  .435937500000e+02  .261510892978e-08 -.142304064404e+00
+      .201165676117e-05  .226471573114e-03  .109840184450e-04  .544061822701e+04
+      .468600000000e+06  .111758708954e-07 -.313008275208e+01  .409781932831e-07
+      .980287270202e+00  .113593750000e+03 -.276495796017e+00 -.518200156545e-08
+     -.595381942905e-09  .258000000000e+03  .213800000000e+04 0.000000000000e+00
+      .312000000000e+01  .000000000000e+00  .232830643654e-09  .000000000000e+00
+      .469330000000e+06 0.000000000000e+00 0.000000000000e+00 0.000000000000e+00";
+        let version = Version::new(3, 0);
+        let entry = build_record_entry(version, Constellation::Mixed, content);
+        assert_eq!(entry.is_ok(), true);
+        let (epoch, class, frame) = entry.unwrap();
+        assert_eq!(epoch, Epoch {
+            date: epoch::str2date("2021 01 01 10 10 00").unwrap(),
+            flag: epoch::EpochFlag::Ok,
+        });
+        assert_eq!(class, FrameClass::Ephemeris);
+        let fr = frame.as_eph();
+        assert_eq!(fr.is_some(), true);
+        let (msg_type, sv, clk, clk_dr, clk_drr, map) = fr.unwrap();
+        assert_eq!(msg_type, MsgType::LNAV);
+        assert_eq!(sv, Sv {
+            constellation: Constellation::Galileo,
+            prn: 1,
+        });
+        assert_eq!(clk, -0.101553811692e-02); 
+        assert_eq!(clk_dr, -0.804334376880e-11);
+        assert_eq!(clk_drr, 0.0);
+        assert_eq!(map.len(), 24);
+        for (k, v) in map.iter() {
+            if k.eq("iodnav") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.130000000000e+02); 
+            } else if k.eq("crs") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.435937500000e+02);
+            } else if k.eq("deltaN") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.261510892978e-08);
+            } else if k.eq("m0") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, -0.142304064404e+00); 
+            
+            } else if k.eq("cuc") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.201165676117e-05);
+            } else if k.eq("e") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.226471573114e-03); 
+            } else if k.eq("cus") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.109840184450e-04); 
+            } else if k.eq("sqrta") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.544061822701e+04); 
+            
+            } else if k.eq("toe") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.468600000000e+06); 
+            } else if k.eq("cic") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.111758708954e-07); 
+            } else if k.eq("omega0") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, -0.313008275208e+01);
+            } else if k.eq("cis") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.409781932831e-07);
+            
+            } else if k.eq("i0") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.980287270202e+00); 
+            } else if k.eq("crc") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.113593750000e+03);
+            } else if k.eq("omega") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, -0.276495796017e+00);
+            } else if k.eq("omegaDot") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, -0.518200156545e-08);
+            
+            } else if k.eq("idot") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, -0.595381942905e-09);
+            } else if k.eq("dataSrc") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.258000000000e+03);
+            } else if k.eq("galWeek") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.213800000000e+04);
+            //SPARE
+            
+            } else if k.eq("sisa") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.312000000000e+01);
+            } else if k.eq("svHealth") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.000000000000e+00);
+            } else if k.eq("bgdE5aE1") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.232830643654e-09);
+            } else if k.eq("bgdE5bE1") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.000000000000e+00);
+            
+            } else if k.eq("t_tm") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.469330000000e+06);
+            
+            } else { 
+                panic!("Got unexpected key \"{}\" for GALV3 record", k);
+            }
+        }
+    }
+    #[test]
+    fn test_v3_glonass_entry() {
+        let content =
+"R07 2021 01 01 09 45 00 -.420100986958e-04  .000000000000e+00  .342000000000e+05
+      .124900639648e+05  .912527084351e+00  .000000000000e+00  .000000000000e+00
+      .595546582031e+04  .278496932983e+01  .000000000000e+00  .500000000000e+01
+      .214479208984e+05 -.131077289581e+01 -.279396772385e-08  .000000000000e+00";
+        let version = Version::new(3, 0);
+        let entry = build_record_entry(version, Constellation::Mixed, content);
+        assert_eq!(entry.is_ok(), true);
+        let (epoch, class, frame) = entry.unwrap();
+        assert_eq!(epoch, Epoch {
+            date: epoch::str2date("2021 01 01 09 45 00").unwrap(),
+            flag: epoch::EpochFlag::Ok,
+        });
+        assert_eq!(class, FrameClass::Ephemeris);
+        let fr = frame.as_eph();
+        assert_eq!(fr.is_some(), true);
+        let (msg_type, sv, clk, clk_dr, clk_drr, map) = fr.unwrap();
+        assert_eq!(msg_type, MsgType::LNAV);
+        assert_eq!(sv, Sv {
+            constellation: Constellation::Glonass,
+            prn: 7,
+        });
+        assert_eq!(clk, -0.420100986958e-04);
+        assert_eq!(clk_dr, 0.000000000000e+00);
+        assert_eq!(clk_drr, 0.342000000000e+05);
+        assert_eq!(map.len(), 12);
+        for (k, v) in map.iter() {
+            if k.eq("satPosX") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.124900639648e+05);
+            } else if k.eq("velX") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.912527084351e+00);
+            } else if k.eq("accelX") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.000000000000e+00);
+            } else if k.eq("health") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.000000000000e+00);
+            } else if k.eq("satPosY") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.595546582031e+04);
+            } else if k.eq("velY") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.278496932983e+01); 
+            } else if k.eq("accelY") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.000000000000e+00);
+            } else if k.eq("freqNum") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.500000000000e+01);
+            } else if k.eq("satPosZ") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.214479208984e+05);
+            } else if k.eq("velZ") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, -0.131077289581e+01);
+            } else if k.eq("accelZ") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, -0.279396772385e-08);
+            } else if k.eq("ageOp") {
+                let v = v.as_f64();
+                assert_eq!(v.is_some(), true);
+                let v = v.unwrap();
+                assert_eq!(v, 0.000000000000e+00);
+            } else { 
+                panic!("Got unexpected key \"{}\" for GLOV3 record", k);
+            }
+        }
+    }
+/* GAL V4 from example please */
 }
