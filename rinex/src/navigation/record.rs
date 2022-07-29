@@ -2,22 +2,23 @@
 use std::io::Write;
 use thiserror::Error;
 use std::str::FromStr;
+use strum_macros::EnumString;
 use std::collections::{BTreeMap, HashMap};
 
-pub mod ionmessage;
-
+use crate::epoch;
+use crate::header;
 use crate::sv;
 use crate::sv::Sv;
-use crate::epoch;
 use crate::epoch::{Epoch, ParseDateError};
 use crate::version::Version;
 use crate::navigation::database;
 use crate::constellation::Constellation;
 use crate::navigation::database::NAV_MESSAGES;
+use crate::navigation::ionmessage;
 
 /// `ComplexEnum` is record payload 
 #[derive(Clone, Debug)]
-#[derive(PartialEq)]
+#[derive(PartialEq, PartialOrd)]
 #[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
 pub enum ComplexEnum {
     U8(u8),
@@ -96,6 +97,7 @@ impl ComplexEnum {
 /// Possible Navigation Frame declinations for an epoch
 #[derive(Debug, Clone)]
 #[derive(PartialEq, PartialOrd)]
+#[derive(Eq, Ord)]
 #[derive(EnumString)]
 #[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
 pub enum FrameClass {
@@ -148,10 +150,14 @@ pub enum MsgType {
     CNVX,
 }
 
+impl Default for MsgType {
+    fn default() -> Self {
+        Self::LNAV
+    }
+}
+
 /// Navigation Frame for a given epoch
 #[derive(Debug, Clone)]
-#[derive(PartialEq, PartialOrd)]
-#[derive(Eq, Ord)]
 #[derive(EnumString)]
 #[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
 pub enum Frame {
@@ -171,14 +177,28 @@ pub enum Frame {
 
 impl Frame {
     /// Unwraps self as Ephemeris frame
-    pub fn as_eph (&self) -> Option<&(MsgType, Sv, f64, f64, f64, HashMap<String, ComplexEnum>)> {
+    pub fn as_eph (&self) -> Option<(&MsgType, &Sv, &f64, &f64, &f64, &HashMap<String, ComplexEnum>)> {
         match self {
-            Self::Eph(fr) => Some(fr),
+            Self::Eph(msg, sv, clk, clk_dr, clk_drr, map) => Some((msg, sv, clk, clk_dr, clk_drr, map)),
+            _ => None,
+        }
+    }
+    /// Unwraps self as Ephemeris frame
+    pub fn as_mut_eph (&mut self) -> Option<(&mut MsgType, &mut Sv, &mut f64, &mut f64, &mut f64, &mut HashMap<String, ComplexEnum>)> {
+        match self {
+            Self::Eph(msg, sv, clk, clk_dr, clk_drr, map) => Some((msg, sv, clk, clk_dr, clk_drr, map)),
             _ => None,
         }
     }
     /// Unwraps self as Ionospheric Model frame
     pub fn as_ion (&self) -> Option<&ionmessage::Message> {
+        match self {
+            Self::Ion(fr) => Some(fr),
+            _ => None,
+        }
+    }
+    /// Unwraps self as Ionospheric Model frame
+    pub fn as_mut_ion (&mut self) -> Option<&mut ionmessage::Message> {
         match self {
             Self::Ion(fr) => Some(fr),
             _ => None,
@@ -233,14 +253,20 @@ pub fn is_new_epoch (line: &str, v: Version) -> bool {
 /// Navigation Record Parsing Error
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("epoch is missing data")]
+    MissingData,
+    #[error("failed to locate revision in db")]
+    DataBaseRevisionError,
     #[error("failed to parse msg type")]
     SvError(#[from] sv::Error),
     #[error("failed to parse cplx data")]
     ParseComplexError(#[from] ComplexEnumError),
     #[error("failed to parse sv::prn")]
     ParseIntError(#[from] std::num::ParseIntError), 
-    #[error("failed to parse date")]
-    ParseDateError(#[from] ParseDateError), 
+    #[error("failed to parse sv clock fields")]
+    ParseFloatError(#[from] std::num::ParseFloatError),
+    #[error("failed to parse epoch date")]
+    ParseDateError(#[from] ParseDateError),
 }
 
 /// Builds `Record` entry for `NavigationData`
@@ -266,7 +292,10 @@ fn build_v2_v3_record_entry (version: Version, constell: Constellation, content:
         Result<(Epoch, FrameClass, Frame), Error>
 {
     let mut lines = content.lines();
-    let line = lines.next()?;
+    let line = match lines.next() {
+        Some(l) => l,
+        _ => return Err(Error::MissingData), 
+    };
     
     let version_major = version.major;
     let svnn_offset :usize = match version.major {
@@ -281,7 +310,7 @@ fn build_v2_v3_record_entry (version: Version, constell: Constellation, content:
     let (clk_dr, clk_drr) = rem.split_at(19);
 
     println!("V2 V3 | 1ST LINE | SVNN \"{}\" DATE \"{}\" BIAS \"{}\" DRIFT \"{}\" DR \"{}\"",
-        svnn, date, svbias, svdrift, svrdriftr);
+        svnn, date, clk_bias, clk_dr, clk_drr);
 
     let sv : Sv = match version.major {
         1|2 => {
@@ -290,11 +319,12 @@ fn build_v2_v3_record_entry (version: Version, constell: Constellation, content:
                 prn: u8::from_str_radix(svnn, 10)?,
             }
         },
-        3 => Sv::from_str(svnn)? 
+        3 => Sv::from_str(svnn)?,
+        _ => unreachable!(),
     };
 
-    let clk     = f64::from_str(clk_bias.trim())?;
-    let clk_dr  = f64::from_str(clk_dr.trim())?;
+    let clk = f64::from_str(clk_bias.trim())?;
+    let clk_dr = f64::from_str(clk_dr.trim())?;
     let clk_drr = f64::from_str(clk_drr.trim())?;
     let map = parse_complex_map(version, constell, lines)?;
     let fr = Frame::Eph(MsgType::LNAV, sv, clk, clk_dr, clk_drr, map); // indicate legacy frame
@@ -309,14 +339,14 @@ fn build_v2_v3_record_entry (version: Version, constell: Constellation, content:
 }
 
 /// Parses constellation + revision dependent complex map 
-fn parse_complex_map (version: Version, constell: Constellation, lines: &mut Iter<&str>) 
+fn parse_complex_map (version: Version, constell: Constellation, mut lines: std::str::Lines<'_>) 
         -> Result<HashMap<String, ComplexEnum>, Error>
 {
     // locate closest revision in db
-    let db_revision = database::closest_revision(
-        constell,
-        version,
-    )?;
+    let db_revision = match database::closest_revision(constell, version) {
+        Some(v) => v,
+        _ => return Err(Error::DataBaseRevisionError),
+    };
 
     // retrieve db items / fields to parse
     let items :Vec<_> = NAV_MESSAGES
@@ -336,7 +366,10 @@ fn parse_complex_map (version: Version, constell: Constellation, lines: &mut Ite
         .collect();
 
     // parse items
-    let mut line = lines.next();
+    let mut line = match lines.next() {
+        Some(l) => l,
+        _ => return Err(Error::MissingData),
+    };
     let mut new_line = true;
     let mut total :usize = 0;
     let mut map :HashMap<String, ComplexEnum> = HashMap::new();
@@ -345,12 +378,12 @@ fn parse_complex_map (version: Version, constell: Constellation, lines: &mut Ite
         let offset :usize = match new_line {
             false => 19,
             true => {
+                new_line = false;
                 if version.major == 3 {
                     22+1
                 } else {
                     22
-                };
-                new_line = false
+                }
             },
         };
         total += offset;
@@ -389,7 +422,7 @@ pub fn to_file (header: &header::Header, record: &Record, mut writer: std::fs::F
             }
         }
         let mut index = 1;
-        for (_sv, data) in sv.iter() {
+        /*for (_sv, data) in sv.iter() {
             for (_obs, data) in data.iter() {
                 let _ = write!(writer, "{}", data);
             }
@@ -397,7 +430,7 @@ pub fn to_file (header: &header::Header, record: &Record, mut writer: std::fs::F
                 let _ = write!(writer, "\n    ");
             }
             index += 1
-        }
+        }*/
     }
     Ok(())
 }

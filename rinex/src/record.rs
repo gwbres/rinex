@@ -3,7 +3,6 @@ use thiserror::Error;
 use std::io::{prelude::*};
 use std::collections::{BTreeMap, HashMap};
 
-use crate::sv;
 use crate::antex;
 use crate::epoch;
 use crate::meteo;
@@ -267,7 +266,7 @@ pub fn build_record (reader: &mut BufferedReader, header: &header::Header) -> Re
                 if new_epoch && !first_epoch {
                     match &header.rinex_type {
                         Type::NavigationData => {
-                            if let Ok((e, sv, map)) = navigation::record::build_record_entry(&header, &epoch_content) {
+                            if let Ok((e, class, fr)) = navigation::record::build_record_entry(header.version, header.constellation.unwrap(), &epoch_content) {
                                 if nav_rec.contains_key(&e) {
                                     // <o 
                                     // NAV epoch provides a unique Sv for a given epoch
@@ -275,14 +274,14 @@ pub fn build_record (reader: &mut BufferedReader, header: &header::Header) -> Re
                                     // in case of `merged` RINEX
                                     // --> retrieve previous epoch
                                     // ---> append new `sv` data 
-                                    let mut prev = nav_rec.remove(&e).unwrap(); // grab previous entry
-                                    prev.insert(sv, map); // insert 
-                                    nav_rec.insert(e, prev); // (re)insert
+                                    // let mut prev = nav_rec.remove(&e).unwrap(); // grab previous entry
+                                    // prev.insert(sv, map); // insert 
+                                    // nav_rec.insert(e, prev); // (re)insert
                                 } else {
                                     // new epoch -> insert
-                                    let mut sv_map : HashMap<sv::Sv, HashMap<String, navigation::record::ComplexEnum>> = HashMap::with_capacity(1);
-                                    sv_map.insert(sv, map);
-                                    nav_rec.insert(e, sv_map);
+                                    // let mut sv_map : HashMap<sv::Sv, HashMap<String, navigation::record::ComplexEnum>> = HashMap::with_capacity(1);
+                                    // sv_map.insert(sv, map);
+                                    // nav_rec.insert(e, sv_map);
                                 };
                                 comment_ts = e.clone(); // for comments classification & management
                             }
@@ -382,11 +381,12 @@ pub fn build_record (reader: &mut BufferedReader, header: &header::Header) -> Re
     //   + comments parsing with empty record (empty file body)
     match &header.rinex_type {
         Type::NavigationData => {
-            if let Ok((e, sv, map)) = navigation::record::build_record_entry(&header, &epoch_content) {
-                let mut smap : HashMap<sv::Sv, HashMap<String, navigation::record::ComplexEnum>> = HashMap::with_capacity(1);
+            if let Ok((e, class, fr)) = navigation::record::build_record_entry(header.version, header.constellation.unwrap(), &epoch_content) {
+                /*let mut smap : HashMap<sv::Sv, HashMap<String, navigation::record::ComplexEnum>> = HashMap::with_capacity(1);
                 smap.insert(sv, map);
                 nav_rec.insert(e, smap);
                 comment_ts = e.clone(); // for comments classification + management
+                */
             }
         },
         Type::ObservationData => {

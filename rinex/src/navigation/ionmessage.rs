@@ -3,6 +3,9 @@ use bitflags::bitflags;
 
 /// Klobuchar model payload,
 /// we don't know how to parse the possible extra Region Code yet
+#[derive(Default)]
+#[derive(Debug, Clone)]
+#[derive(PartialEq, PartialOrd)]
 pub struct KbModel {
     /// Alpha coefficients 
     /// ([sec], [sec.semi-circle⁻¹], [sec.semi-circle⁻²])
@@ -23,21 +26,27 @@ bitflags! {
 }
 
 /// Nequick-G Model payload
+#[derive(Debug, Clone)]
+#[derive(PartialEq, PartialOrd)]
 pub struct NgModel {
     /// a_i coefficients
     /// ([sfu], [sfu.semi-circle⁻¹], [sfu.semi-circle⁻²])
-    pub a: (f64,f64,f64) 
+    pub a: (f64,f64,f64), 
     /// Region flags
     pub region: NgRegionFlags,
 }
 
 /// BDGIM Model payload
+#[derive(Debug, Clone)]
+#[derive(PartialEq, PartialOrd)]
 pub struct BdModel {
     /// Alpha coefficients [TECu]
     pub alpha: (f64,f64,f64,f64,f64,f64,f64),
 }
 
 /// Existing ION Message declinations
+#[derive(Debug, Clone)]
+#[derive(PartialEq, PartialOrd)]
 pub enum Message {
     /// Klobuchar Model
     KlobucharModel(KbModel),
@@ -45,6 +54,12 @@ pub enum Message {
     NequickGModel(NgModel),
     /// BDGIM Model
     BdgimModel(BdModel),
+}
+
+impl Default for Message {
+    fn default() -> Self {
+        Self::KlobucharModel(KbModel::default())
+    }
 }
 
 impl Message {
@@ -58,7 +73,7 @@ impl Message {
     /// Unwraps self as Nequick Model
     pub fn as_nequick (&self) -> Option<&NgModel> {
         match self {
-            Self::NequickModel(model) => Some(model),
+            Self::NequickGModel(model) => Some(model),
             _ => None,
         }
     }

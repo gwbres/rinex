@@ -844,14 +844,14 @@ impl Rinex {
             for (_e, (_clk, sv)) in record.iter_mut() {
                 sv.retain(|sv, _| filter.contains(&sv.constellation))
             }
-        } else if self.is_navigation_rinex() {
+        } /* else if self.is_navigation_rinex() {
             let record = self.record
                 .as_mut_nav()
                 .unwrap();
             for (_e, sv) in record.iter_mut() {
                 sv.retain(|sv, _| filter.contains(&sv.constellation))
             }
-        }
+        } */
     }
 
     /// Retains data that were recorded only for given list of 
@@ -865,14 +865,14 @@ impl Rinex {
             for (_e, (_clk, sv)) in record.iter_mut() {
                 sv.retain(|sv, _| filter.contains(sv))
             }
-        } else if self.is_navigation_rinex() {
+        } /* else if self.is_navigation_rinex() {
             let record = self.record
                 .as_mut_nav()
                 .unwrap();
             for (_e, sv) in record.iter_mut() {
                 sv.retain(|sv, _| filter.contains(sv))
             }
-        }
+        } */
     }
     
     /// Extracts distant clock offsets 
@@ -927,7 +927,7 @@ impl Rinex {
             return BTreeMap::new(); // nothing to extract
         }
         let mut results: BTreeMap<epoch::Epoch, BTreeMap<sv::Sv, f64>> = BTreeMap::new();
-        let record = self.record
+        /*let record = self.record
             .as_nav()
             .unwrap();
         for (e, sv) in record.iter() {
@@ -942,7 +942,7 @@ impl Rinex {
                 }
             }
             results.insert(*e, map);
-        }
+        }*/
         results
     }
 
@@ -987,7 +987,7 @@ impl Rinex {
             return BTreeMap::new(); // nothing to extract
         }
         let mut results: BTreeMap<epoch::Epoch, BTreeMap<sv::Sv, (f64,f64,f64)>> = BTreeMap::new();
-        let record = self.record
+        /*let record = self.record
             .as_nav()
             .unwrap();
         for (e, sv) in record.iter() {
@@ -1012,7 +1012,7 @@ impl Rinex {
                 map.insert(*sv, triplet); // (clk, dr, drr) are always there
             }
             results.insert(*e, map);
-        }
+        }*/
         results
     }
 
@@ -1048,7 +1048,7 @@ impl Rinex {
             for code in obs.codes.iter() {
                 result.push(code.to_string())
             }
-        } else if self.is_navigation_rinex() {
+        } /* else if self.is_navigation_rinex() {
             let record = self.record
                 .as_nav()
                 .unwrap();
@@ -1061,7 +1061,7 @@ impl Rinex {
                     }
                 }
             }
-        }
+        } */
         result
     }
 
@@ -1072,7 +1072,7 @@ impl Rinex {
     /// we simply ignore it in the filter operation.
     /// This has no effect if self is an ATX or a IONEX record.
     pub fn observable_filter_mut (&mut self, filter: Vec<&str>) {
-        if self.is_navigation_rinex() {
+        /* if self.is_navigation_rinex() {
             let record = self.record
                 .as_mut_nav()
                 .unwrap();
@@ -1087,7 +1087,7 @@ impl Rinex {
                     })
                 }
             }
-        } else if self.is_observation_rinex() {
+        } else*/ if self.is_observation_rinex() {
             let record = self.record
                 .as_mut_obs()
                 .unwrap();
