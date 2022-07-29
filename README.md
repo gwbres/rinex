@@ -40,11 +40,6 @@ and the [rinex](rinex/) crate.
 | `Troposphere` (TRO)      | :construction:    |                    |  :construction:        | :question:           |:construction: |   `Troposphere` are one possible SINEX declination |
 | `Bias` (BIA)             | :heavy_check_mark:| :heavy_minus_sign: |  :construction:        | :question:           |:construction: |   `Bias` solutions are one possible SINEX declination |
 
-Notes on `V4`: 
-- `NAV` should not fail but newer frame types decoding is not implemented
-- `MET` will work if indeed, only the Y/M/D H:M:S field differ   
-:arrow_right_hook: Data, tests and contributions are welcomed
-
 **Production** means file generation (_to_file()_) of `trusted` revisions  
 **CLI** means exposed to [`rinex-cli`](rinex-cli/) for easy parsing & quick analysis  
 **UBX** means exposed to [`ublox-rnx`](ublox-rnx/) for to produce data with a UBLOX receiver  
