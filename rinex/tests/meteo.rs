@@ -29,9 +29,6 @@ mod test {
         assert_eq!(record.is_some(), true);
         let record = record.unwrap();
         assert_eq!(record.len(), 5);
-        println!("{:#?}", rinex.header);
-        println!("{:#?}", rinex.header.meteo);
-        println!("{:#?}", record);
 
         // test epoch content
         for (_, obs) in record.iter() {
