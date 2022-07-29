@@ -246,9 +246,13 @@
             "galWeek": "f64",
             "spare1": "xxxx",
             "sisa": "f64",
+            "svHealth": "f64",
             "bgdE5aE1": "f64",
             "bgdE5bE1": "f64",
-            "t_tm": "f64"
+            "t_tm": "f64",
+            "spare2": "xxxx",
+            "spare3": "xxxx",
+            "spare4": "xxxx"
         }
     },
     {
@@ -273,10 +277,10 @@
             "omega": "f64",
             "omegaDot": "f64",
             "idot": "f64",
+            "dataSrc": "f64",
             "galWeek": "f64",
-            "spare1": "xxxx",
-            "spare2": "xxxx",
             "sisa": "f64",
+            "svHealth": "f64",
             "bgdE5aE1": "f64",
             "bgdE5bE1": "f64",
             "spare3": "xxxx",
