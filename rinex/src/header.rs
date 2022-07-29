@@ -596,7 +596,7 @@ impl Header {
                                     Constellation::GPS,
                                     Constellation::Glonass,
                                     Constellation::Galileo,
-                                    Constellation::Beidou,
+                                    Constellation::BeiDou,
                                     Constellation::SBAS(Augmentation::default()),
                                     Constellation::QZSS,
                                 ];
@@ -631,7 +631,7 @@ impl Header {
                                     Constellation::GPS,
                                     Constellation::Glonass,
                                     Constellation::Galileo,
-                                    Constellation::Beidou,
+                                    Constellation::BeiDou,
                                     Constellation::SBAS(Augmentation::default()),
                                     Constellation::QZSS,
                                 ]

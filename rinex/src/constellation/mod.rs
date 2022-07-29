@@ -26,8 +26,8 @@ pub enum Constellation {
     GPS,
     /// `Glonass` russian constellation
     Glonass,
-    /// `Beidou` chinese constellation
-    Beidou,
+    /// `BeiDou` chinese constellation
+    BeiDou,
     /// `QZSS` japanese constellation
     QZSS,
     /// `Galileo` european constellation
@@ -61,7 +61,7 @@ impl Constellation {
         } else if code.to_lowercase().eq("r") {
             Ok(Constellation::Glonass)
         } else if code.to_lowercase().eq("c") {
-            Ok(Constellation::Beidou)
+            Ok(Constellation::BeiDou)
         } else if code.to_lowercase().eq("e") {
             Ok(Constellation::Galileo)
         } else if code.to_lowercase().eq("j") {
@@ -82,7 +82,7 @@ impl Constellation {
             Constellation::GPS => "G",
             Constellation::Glonass => "R",
             Constellation::Galileo => "E",
-            Constellation::Beidou => "C",
+            Constellation::BeiDou => "C",
             Constellation::SBAS(_) => "S",
             Constellation::QZSS => "J",
             Constellation::IRNSS => "I",
@@ -101,7 +101,7 @@ impl Constellation {
         } else if code.to_lowercase().eq("glo") {
             Ok(Constellation::Glonass)
         } else if code.to_lowercase().eq("bds") {
-            Ok(Constellation::Beidou)
+            Ok(Constellation::BeiDou)
         } else if code.to_lowercase().eq("gal") {
             Ok(Constellation::Galileo)
         } else if code.to_lowercase().eq("qzs") {
@@ -120,7 +120,7 @@ impl Constellation {
             Constellation::GPS => "GPS",
             Constellation::Glonass => "GLO",
             Constellation::Galileo => "GAL",
-            Constellation::Beidou => "BDS",
+            Constellation::BeiDou => "BDS",
             Constellation::SBAS(_) => "GEO",
             Constellation::QZSS => "QZS",
             Constellation::IRNSS => "IRN",
@@ -139,7 +139,7 @@ impl Constellation {
         } else if code.to_lowercase().contains("qzss") {
             Ok(Constellation::QZSS)
         } else if code.to_lowercase().contains("beidou") {
-            Ok(Constellation::Beidou)
+            Ok(Constellation::BeiDou)
         } else if code.to_lowercase().contains("sbas") {
             Ok(Constellation::SBAS(Augmentation::default()))
         } else if code.to_lowercase().contains("irnss") {

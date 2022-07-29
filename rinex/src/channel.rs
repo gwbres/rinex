@@ -13,7 +13,7 @@ pub enum Code {
     C1, 
     /// GPS/GLONASS L1P
     P1,
-    /// Beidou B1i
+    /// BeiDou B1i
     B1,
     /// Galileo E1
     E1,
@@ -21,7 +21,7 @@ pub enum Code {
     C2, 
     /// GPS / GLONASS L2P
     P2,
-    /// Beidou B2i
+    /// BeiDou B2i
     B2,
     /// Galileo E5
     E5,
@@ -298,7 +298,7 @@ impl Channel {
                     _ => Ok(Self::L1),
                 }
             },
-            Constellation::Beidou => {
+            Constellation::BeiDou => {
                 match sv.prn {
                     1 => Ok(Self::E1),
                     2 => Ok(Self::E2),
