@@ -109,7 +109,7 @@ mod test {
                 assert_eq!(minor.is_ok(), true);
                 for item in r.items.iter() {
                     let (k, v) = item;
-                    if !k.eq(&"spare") {
+                    if !k.contains(&"spare") {
                         let test : String;
                         if v.eq(&"f32") {
                             test = String::from("0.0")
