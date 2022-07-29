@@ -165,15 +165,15 @@ mod test {
         assert_eq!(found, Some(version::Version::new(1, 0)));
         // test BDS 1.0 ==> does not exist 
         let target = version::Version::new(1, 0);
-        let found = closest_revision(Constellation::Beidou, target); 
+        let found = closest_revision(Constellation::BeiDou, target); 
         assert_eq!(found, None); 
         // test BDS 1.4 ==> does not exist 
         let target = version::Version::new(1, 4);
-        let found = closest_revision(Constellation::Beidou, target); 
+        let found = closest_revision(Constellation::BeiDou, target); 
         assert_eq!(found, None); 
         // test BDS 2.0 ==> does not exist 
         let target = version::Version::new(2, 0);
-        let found = closest_revision(Constellation::Beidou, target); 
+        let found = closest_revision(Constellation::BeiDou, target); 
         assert_eq!(found, None); 
     }
 }
