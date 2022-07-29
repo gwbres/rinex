@@ -6,6 +6,7 @@ use bitflags::bitflags;
 #[derive(Default)]
 #[derive(Debug, Clone)]
 #[derive(PartialEq, PartialOrd)]
+#[cfg_attr(feature = "with-serde", derive(Serialize))]
 pub struct KbModel {
     /// Alpha coefficients 
     /// ([sec], [sec.semi-circle⁻¹], [sec.semi-circle⁻²])
@@ -16,6 +17,7 @@ pub struct KbModel {
 }
 
 bitflags! {
+    #[cfg_attr(feature = "with-serde", derive(Serialize))]
     pub struct NgRegionFlags: u16 {
         const REGION5 = 0x01;
         const REGION4 = 0x02;
@@ -28,6 +30,7 @@ bitflags! {
 /// Nequick-G Model payload
 #[derive(Debug, Clone)]
 #[derive(PartialEq, PartialOrd)]
+#[cfg_attr(feature = "with-serde", derive(Serialize))]
 pub struct NgModel {
     /// a_i coefficients
     /// ([sfu], [sfu.semi-circle⁻¹], [sfu.semi-circle⁻²])
@@ -39,6 +42,7 @@ pub struct NgModel {
 /// BDGIM Model payload
 #[derive(Debug, Clone)]
 #[derive(PartialEq, PartialOrd)]
+#[cfg_attr(feature = "with-serde", derive(Serialize))]
 pub struct BdModel {
     /// Alpha coefficients [TECu]
     pub alpha: (f64,f64,f64,f64,f64,f64,f64),
@@ -47,6 +51,7 @@ pub struct BdModel {
 /// Existing ION Message declinations
 #[derive(Debug, Clone)]
 #[derive(PartialEq, PartialOrd)]
+#[cfg_attr(feature = "with-serde", derive(Serialize))]
 pub enum Message {
     /// Klobuchar Model
     KlobucharModel(KbModel),
