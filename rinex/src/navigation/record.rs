@@ -2,18 +2,22 @@
 use std::io::Write;
 use thiserror::Error;
 use std::str::FromStr;
-use std::collections::{BTreeMap,HashMap};
+use std::collections::{BTreeMap, HashMap};
+
+pub mod ionmessage;
 
 use crate::sv;
+use crate::sv::Sv;
 use crate::epoch;
-use crate::header;
-use crate::version;
+use crate::epoch::{Epoch, ParseDateError};
+use crate::version::Version;
 use crate::navigation::database;
 use crate::constellation::Constellation;
 use crate::navigation::database::NAV_MESSAGES;
 
 /// `ComplexEnum` is record payload 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive(PartialEq)]
 #[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
 pub enum ComplexEnum {
     U8(u8),
@@ -89,12 +93,6 @@ impl ComplexEnum {
     }
 }
 
-#[derive(Debug, Clone)]
-#[derive(PartialEq, PartialOrd)]
-pub struct StoMessage {
-    
-}
-
 /// Possible Navigation Frame declinations for an epoch
 #[derive(Debug, Clone)]
 #[derive(PartialEq, PartialOrd)]
@@ -128,52 +126,59 @@ impl std::fmt::Display for FrameClass {
     }
 }
 
+
+/// Navigation Message Types 
 #[derive(Debug, Clone)]
 #[derive(PartialEq, PartialOrd)]
 #[derive(Eq, Ord)]
 #[derive(EnumString)]
+#[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
+pub enum MsgType {
+    /// Legacy NAV
+    LNAV,
+    /// FDMA
+    FDMA,
+    /// IFNV,
+    IFNV,
+    /// D1D2,
+    D1D2,
+    /// SBAS
+    SBAS,
+    /// CNVX special marker
+    CNVX,
+}
+
 /// Navigation Frame for a given epoch
+#[derive(Debug, Clone)]
+#[derive(PartialEq, PartialOrd)]
+#[derive(Eq, Ord)]
+#[derive(EnumString)]
+#[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
 pub enum Frame {
-    /// Ephemeris are sorted by Space vehicule,
-    /// and by description codes. To determine existing
-    /// description coddes, refer to RINEX specifications,
-    /// or db/NAV/navigation.json. "clockBias", "clockDrift"
-    /// and "clockDriftRate" are the only common description codes.
-    /// Other, like "iode", "crs", "cus".. are constellation
-    /// and revision dependent.
-    Eph(BTreeMap<Sv, HashMap<String, ComplexEnum>>),
+    /// Ephemeris for a given Vehicule `Sv`,
+    /// with vehicule internal clock bias, clock drift and clock drift rate.
+    /// Rest of data is constellation dependent, see
+    /// RINEX specifications or db/NAV/navigation.json.
+    Eph(MsgType, Sv, f64, f64, f64, HashMap<String, ComplexEnum>),
+    /*
     /// System Time Offset message
     Sto(StoMessage),
     /// Earth Orientation Parameters
-    Eop(EopMessage),
+    Eop(EopMessage), */
     /// Ionospheric Model Message
-    Ion(IonMessage),
+    Ion(ionmessage::Message),
 }
 
 impl Frame {
-    /// Unwraps self as Ephemeris frame 
-    pub fn as_eph (&self) -> Option<&BTreeMap<Sv, HashMap<String, ComplexEnum>>> {
+    /// Unwraps self as Ephemeris frame
+    pub fn as_eph (&self) -> Option<&(MsgType, Sv, f64, f64, f64, HashMap<String, ComplexEnum>)> {
         match self {
             Self::Eph(fr) => Some(fr),
             _ => None,
         }
     }
-    /// Unwraps self as System Time Offset frame
-    pub fn as_sto (&self) -> Option<&StoMessage> {
-        match self {
-            Self::Sto(fr) => Some(fr),
-            _ => None,
-        }
-    }
-    /// Unwraps self as Earth Orientation parameters frame
-    pub fn as_eop (&self) -> Option<&EopMessage> {
-        match self {
-            Self::Eop(fr) => Some(fr),
-            _ => None,
-        }
-    }
     /// Unwraps self as Ionospheric Model frame
-    pub fn as_ion (&self) -> Option<&IonMessage> {
+    pub fn as_ion (&self) -> Option<&ionmessage::Message> {
         match self {
             Self::Ion(fr) => Some(fr),
             _ => None,
@@ -183,11 +188,11 @@ impl Frame {
 
 /// Navigation Record.
 /// Data is sorted by epoch, and by Frame class.
-pub type Record = BTreeMap<epoch::Epoch, BTreeMap<FrameClass, Frame>>;
+pub type Record = BTreeMap<Epoch, BTreeMap<FrameClass, Frame>>;
 
 /// Returns true if given content matches the beginning of a 
 /// Navigation record epoch
-pub fn is_new_epoch (line: &str, v: version::Version) -> bool {
+pub fn is_new_epoch (line: &str, v: Version) -> bool {
     if v.major < 3 { // old RINEX
         if line.len() < 23 {
             return false // not enough bytes 
@@ -209,14 +214,14 @@ pub fn is_new_epoch (line: &str, v: version::Version) -> bool {
         }
         // 1st entry matches a valid SV description
         let (sv, _) = line.split_at(4);
-        if sv::Sv::from_str(sv).is_err() {
+        if Sv::from_str(sv).is_err() {
             return false
         }
         // rest matches a valid epoch descriptor
         let datestr = &line[4..23];
         epoch::str2date(&datestr).is_ok()
 
-    } else { // Modern RINEX --> easy
+    } else { // Modern --> easy 
         if let Some(c) = line.chars().nth(0) {
             c == '>' // new epoch marker 
         } else {
@@ -235,159 +240,141 @@ pub enum Error {
     #[error("failed to parse sv::prn")]
     ParseIntError(#[from] std::num::ParseIntError), 
     #[error("failed to parse date")]
-    ParseDateError(#[from] epoch::ParseDateError), 
+    ParseDateError(#[from] ParseDateError), 
 }
 
 /// Builds `Record` entry for `NavigationData`
-pub fn build_record_entry (header: &header::Header, content: &str)
-        -> Result<(epoch::Epoch, sv::Sv, HashMap<String, ComplexEnum>), Error>
+pub fn build_record_entry (version: Version, constell: Constellation, content: &str) ->
+        Result<(Epoch, FrameClass, Frame), Error>
 {
-    //  <o 
-    //     SV + Epoch + SvClock infos + RecType + MsgType are always there
-    //     Other items are constellation dependent => key map
-    //     easier to deal with than OBS: 
-    //           (*) listing is fixed
-    //           (*) nb of items fixed
-    let mut lines = content.lines();
-    let mut map: HashMap<String, ComplexEnum> = HashMap::new(); 
-    let version_major = header.version.major;
-
-    let mut line = lines.next()
-        .unwrap();
-    
-    // might parse a 1st line (V ≥ 4)
-    //    [+] RecType + SV + MsgType 
-    //                       ^---> newly introduced
-    //                   ^-------> deduce constellation identification keys
-    //                             as we didn't get this information from file header
-    //         ^-----------------> newly introduced
-    let (rectype, sv, msgtype): (ComplexEnum, Option<&str>, ComplexEnum)
-            = match version_major >= 4 
-    {
-        true => {
-            let items: Vec<&str> = line.split_ascii_whitespace()
-                .collect();
-            line = lines.next()
-                .unwrap();
-            (ComplexEnum::new("str", &items[0].trim())?,
-            Some(items[1].trim()),
-            ComplexEnum::new("str", &items[2].trim())?)
-        },
-        false => {
-            (ComplexEnum::new("str", "EPH")?, // ephemeride, default
-            None,
-            ComplexEnum::new("str", "LNAV")?) // legacy, default
-        },
-    };
-
-    map.insert("msg".to_string(), msgtype);
-    map.insert("type".to_string(), rectype);
-
-    // parse a 2nd line
-    // V < 4
-    //    [+] SV + Epoch + SvClock infos
-    //         ^-> deduce constellation identification keys
-    //             as we didn't get this information from file header
-    // V ≥ 4
-    //    [+]  Epoch ; SvClock infos
-    let (sv, rem) : (&str, &str) = match sv.is_none() {
-        true => line.split_at(3), // V < 4
-        false => (sv.unwrap(), line), // V ≥ 4
-    };
-
-    let (date, rem) = rem.split_at(20);
-    let (svbias, rem) = rem.split_at(19);
-    let (svdrift, svdriftr) = rem.split_at(19);
-
-    let sv: sv::Sv = match header.constellation {
-        // SV identification problem
-        //  (+) GLONASS NAV special case
-        //      SV'X' is omitted 
-        //  (+) faulty RINEX producer with unique constellation
-        //      SV'X' is omitted
-        Some(Constellation::Mixed) => sv::Sv::from_str(sv.trim())?,
-        Some(c) => {
-            let prn = u8::from_str_radix(sv.trim(), 10)?;  
-            sv::Sv::new(c, prn)
-        },
-		_ => unreachable!(), // RINEX::NAV body while Type!=NAV
-    };
-
-    map.insert("clockBias".to_string(), ComplexEnum::new("f64", svbias.trim())?); 
-    map.insert("clockDrift".to_string(), ComplexEnum::new("f64", svdrift.trim())?); 
-    map.insert("clockDriftRate".to_string(), ComplexEnum::new("f64", svdriftr.trim())?); 
-
-    line = lines.next()
-        .unwrap();
-
-    let mut total: usize = 0; 
-    let mut new_line = true;
-    
-    // NAV database for all following items
-    // [1] identify revision for given satellite vehicule constellation
-    //     (not using header.revision because it could be Constellation::Mixed
-    let db_revision =  database::closest_revision(
-        sv.constellation,
-        header.version
-    );
-    if let Some(revision) = db_revision { // contained in db
-        // [2] retrieve db items to parse
-        let items : Vec<_> = NAV_MESSAGES
-            .iter()
-            .filter(|r| r.constellation == sv.constellation.to_3_letter_code())
-            .map(|r| {
-                r.revisions
-                    .iter()
-                    .filter(|r| // identified db revision
-                        u8::from_str_radix(r.major,10).unwrap() == revision.major
-                        && u8::from_str_radix(r.minor,10).unwrap() == revision.minor
-                    )
-                    .map(|r| &r.items)
-                    .flatten()
-            })
-            .flatten()
-            .collect();
-        // parse items
-        for item in items.iter() {
-            let (k, v) = item;
-            let offset: usize = match new_line {
-                false => 19,
-                true => {
-                    new_line = false;
-                    if header.version.major >= 3 {
-                        22+1
-                    } else {
-                        22
-                    }
-                }
-            };
-            total += offset;
-            let (content, rem) = line.split_at(offset);
-            line = rem;
-            if !k.eq(&"spare") {
-                let rec_item = ComplexEnum::new(v, content.trim())?;
-                map.insert(String::from(*k), rec_item);
-            }
-            if total >= 76 {
-                new_line = true;
-                total = 0;
-                if let Some(l) = lines.next() {
-                    line = l;
-                } else {
-                    break
-                }
-            }
-        }
+    if content.starts_with(">") {
+        build_modern_record_entry(version, constell, content)
+    } else {
+        build_v2_v3_record_entry(version, constell, content)
     }
+}
+
+/// Builds `Record` entry for Modern NAV frames
+fn build_modern_record_entry (version: Version, constell: Constellation, content: &str) ->
+        Result<(Epoch, FrameClass, Frame), Error>
+{
+    panic!("NAV4 : not yet")
+}
+
+/// Builds `Record` entry for Old NAV frames
+fn build_v2_v3_record_entry (version: Version, constell: Constellation, content: &str) ->
+        Result<(Epoch, FrameClass, Frame), Error>
+{
+    let mut lines = content.lines();
+    let line = lines.next()?;
+    
+    let version_major = version.major;
+    let svnn_offset :usize = match version.major {
+        1|2 => 3,
+        3 => 4,
+        _ => unreachable!(),
+    };
+
+    let (svnn, rem) = line.split_at(svnn_offset);
+    let (date, rem) = rem.split_at(20);
+    let (clk_bias, rem) = rem.split_at(19);
+    let (clk_dr, clk_drr) = rem.split_at(19);
+
+    println!("V2 V3 | 1ST LINE | SVNN \"{}\" DATE \"{}\" BIAS \"{}\" DRIFT \"{}\" DR \"{}\"",
+        svnn, date, svbias, svdrift, svrdriftr);
+
+    let sv : Sv = match version.major {
+        1|2 => {
+            Sv {
+                constellation: constell,
+                prn: u8::from_str_radix(svnn, 10)?,
+            }
+        },
+        3 => Sv::from_str(svnn)? 
+    };
+
+    let clk     = f64::from_str(clk_bias.trim())?;
+    let clk_dr  = f64::from_str(clk_dr.trim())?;
+    let clk_drr = f64::from_str(clk_drr.trim())?;
+    let map = parse_complex_map(version, constell, lines)?;
+    let fr = Frame::Eph(MsgType::LNAV, sv, clk, clk_dr, clk_drr, map); // indicate legacy frame
     Ok((
         epoch::Epoch::new(
             epoch::str2date(date)?,
-            epoch::EpochFlag::default(), // always, for NAV
+            epoch::EpochFlag::default(), // flag never given in NAV 
         ),
-        sv,
-        map,
+        FrameClass::Ephemeris, // legacy: Only Ephemeris exist
+        fr, // ephemeris frame
     ))
 }
+
+/// Parses constellation + revision dependent complex map 
+fn parse_complex_map (version: Version, constell: Constellation, lines: &mut Iter<&str>) 
+        -> Result<HashMap<String, ComplexEnum>, Error>
+{
+    // locate closest revision in db
+    let db_revision = database::closest_revision(
+        constell,
+        version,
+    )?;
+
+    // retrieve db items / fields to parse
+    let items :Vec<_> = NAV_MESSAGES
+        .iter()
+        .filter(|r| r.constellation == constell.to_3_letter_code())
+        .map(|r| {
+            r.revisions
+                .iter()
+                .filter(|r| // identified db revision
+                    u8::from_str_radix(r.major, 10).unwrap() == db_revision.major
+                    && u8::from_str_radix(r.minor, 10).unwrap() == db_revision.minor
+                )
+                .map(|r| &r.items)
+                .flatten()
+        })
+        .flatten()
+        .collect();
+
+    // parse items
+    let mut line = lines.next();
+    let mut new_line = true;
+    let mut total :usize = 0;
+    let mut map :HashMap<String, ComplexEnum> = HashMap::new();
+    for item in items.iter() {
+        let (k, v) = item;
+        let offset :usize = match new_line {
+            false => 19,
+            true => {
+                if version.major == 3 {
+                    22+1
+                } else {
+                    22
+                };
+                new_line = false
+            },
+        };
+        total += offset;
+        let (content, rem) = line.split_at(offset);
+        line = rem.clone();
+
+        if k.eq(&"spare") { // --> got something to parse in db
+            let cplx = ComplexEnum::new(v, content.trim())?;
+            map.insert(k.to_string(), cplx);
+        }
+
+        if total >= 76 {
+            new_line = true;
+            total = 0;
+            if let Some(l) = lines.next() {
+                line = l;
+            } else {
+                break
+            }
+        }
+    }
+    Ok(map)
+}
+
 
 /// Pushes observation record into given file writer
 pub fn to_file (header: &header::Header, record: &Record, mut writer: std::fs::File) -> std::io::Result<()> {
@@ -449,7 +436,6 @@ mod test {
         let u = e.as_f64().unwrap();
         assert_eq!(u, 10.0_f64);
     }
-
     #[test]
     fn test_is_new_epoch() {
         // NAV V<3
@@ -487,5 +473,9 @@ mod test {
         assert_eq!(is_new_epoch(line, version::Version::new(2, 0)), false);
         assert_eq!(is_new_epoch(line, version::Version::new(3, 0)), false);
         assert_eq!(is_new_epoch(line, version::Version::new(4, 0)), true);
+    }
+    #[test]
+    fn test_old_record_entry() {
+        let entry = build_record_entry(content);
     }
 }
