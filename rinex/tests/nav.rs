@@ -152,6 +152,165 @@ mod test {
             index += 1
         }
     }
+    #[test]
+    fn v3_amel00nld_r_2021() {
+        let test_resource = 
+            env!("CARGO_MANIFEST_DIR").to_owned() 
+            + "/../test_resources/NAV/V3/AMEL00NLD_R_20210010000_01D_MN.rnx";
+        let rinex = Rinex::from_file(&test_resource);
+        assert_eq!(rinex.is_ok(), true);
+        let rinex = rinex.unwrap();
+        assert_eq!(rinex.is_navigation_rinex(), true);
+        assert_eq!(rinex.header.obs.is_none(), true);
+        assert_eq!(rinex.header.meteo.is_none(), true);
+        let record = rinex.record.as_nav();
+        assert_eq!(record.is_some(), true);
+        let record = record.unwrap();
+        assert_eq!(record.len(), 6);
+        let expected_epochs : Vec<&str> = vec![
+            "2021 01 01 00 00 0",
+            "2021 01 01 00 15 0",
+            "2021 01 01 05 00 0",
+            "2021 01 01 09 45 0",
+            "2021 01 01 10 10 0",
+            "2021 01 01 15 40 0",
+        ];
+        let mut index = 0;
+        for (e, classes) in record.iter() {
+            let expected_e = epoch::Epoch {
+                date: epoch::str2date(expected_epochs[index]).unwrap(),
+                flag: epoch::EpochFlag::default(),
+            };
+            assert_eq!(*e, expected_e);
+            for (class, frames) in classes.iter() {
+                // only Legacy Ephemeris in V3
+                assert_eq!(*class, FrameClass::Ephemeris);
+                for frame in frames.iter() {
+                    let ephemeris = frame.as_eph();
+                    assert_eq!(ephemeris.is_some(), true);
+                    let (msgtype, sv, clk, clk_dr, clk_drr, data) = ephemeris.unwrap();
+                    assert_eq!(msgtype, MsgType::LNAV); // legacy NAV
+                    match sv.constellation {
+                        Constellation::BeiDou => {
+                            match sv.prn {
+                                5 => {
+                                    assert_eq!(clk, -0.426337239332e-03);
+                                    assert_eq!(clk_dr,  -0.752518047875e-10);
+                                    assert_eq!(clk_drr, 0.0);
+                                    let aode = data.get("aode").unwrap();
+                                    assert_eq!(aode.as_f64(), Some(0.100000000000e+01));
+                                    let crs = data.get("crs").unwrap();
+                                    assert_eq!(crs.as_f64(), Some(0.118906250000e+02));
+                                    let m0 = data.get("m0").unwrap();
+                                    assert_eq!(m0.as_f64(), Some(-0.255139531119e+01));
+                                    let i0 = data.get("i0").unwrap();
+                                    assert_eq!(i0.as_f64(), Some(0.607169709798e-01));
+                                    let acc = data.get("svAccuracy").unwrap();
+                                    assert_eq!(acc.as_f64(), Some(0.200000000000e+01));
+                                    let sath1 = data.get("satH1").unwrap();
+                                    assert_eq!(sath1.as_f64(), Some(0.0));
+                                    let tgd1 = data.get("tgd1b1b3").unwrap();
+                                    assert_eq!(tgd1.as_f64(), Some( -0.599999994133e-09));
+                                },
+                                21 => {
+                                    assert_eq!(clk,  -0.775156309828e-03);
+                                    assert_eq!(clk_dr, -0.144968481663e-10);
+                                    assert_eq!(clk_drr,  0.000000000000e+0);
+                                    let aode = data.get("aode").unwrap();
+                                    assert_eq!(aode.as_f64(), Some(0.100000000000e+01));
+                                    let crs = data.get("crs").unwrap();
+                                    assert_eq!(crs.as_f64(), Some(-0.793437500000e+02));
+                                    let m0 = data.get("m0").unwrap();
+                                    assert_eq!(m0.as_f64(), Some(0.206213212749e+01));
+                                    let i0 = data.get("i0").unwrap();
+                                    assert_eq!(i0.as_f64(), Some(0.964491154768e+00)); 
+                                    let acc = data.get("svAccuracy").unwrap();
+                                    assert_eq!(acc.as_f64(), Some(0.200000000000e+01));
+                                    let sath1 = data.get("satH1").unwrap();
+                                    assert_eq!(sath1.as_f64(), Some(0.0));
+                                    let tgd1 = data.get("tgd1b1b3").unwrap();
+                                    assert_eq!(tgd1.as_f64(), Some(0.143000002950e-07));
+                                },
+                                _ => panic!("identified unexpected BDS vehicule \"{}\"", sv.prn)
+                            }
+                        },
+                        Constellation::Glonass => {
+                            match sv.prn {
+                                19 => {
+                                    assert_eq!(clk,  -0.126023776829e-03);
+                                    assert_eq!(clk_dr,  -0.909494701773e-12); 
+                                    assert_eq!(clk_drr, 0.0);
+                                    let pos = data.get("satPosX").unwrap();
+                                    assert_eq!(pos.as_f64(), Some(0.783916601562e+04));
+                                    let pos = data.get("satPosY").unwrap();
+                                    assert_eq!(pos.as_f64(), Some(-0.216949155273e+05));
+                                    let pos = data.get("satPosZ").unwrap();
+                                    assert_eq!(pos.as_f64(), Some(0.109021518555e+05)); 
+                                },
+                                7 => {
+                                    assert_eq!(clk, -0.420100986958E-04); 
+                                    assert_eq!(clk_dr, 0.0); 
+                                    assert_eq!(clk_drr, 0.342000000000e+05); 
+                                    let pos = data.get("satPosX").unwrap();
+                                    assert_eq!(pos.as_f64(), Some(0.124900639648e+05));
+                                    let pos = data.get("satPosY").unwrap();
+                                    assert_eq!(pos.as_f64(), Some(0.595546582031e+04));
+                                    let pos = data.get("satPosZ").unwrap();
+                                    assert_eq!(pos.as_f64(), Some(0.214479208984e+05));
+                                },
+                                _ => panic!("identified unexpected GLO vehicule \"{}\"", sv.prn)
+                            }
+                        },
+                        Constellation::Galileo => {
+                            match sv.prn {
+                                1 => {
+                                    assert_eq!(clk, -0.101553811692e-02);
+                                    assert_eq!(clk_dr,  -0.804334376880e-11);
+                                    assert_eq!(clk_drr, 0.0);
+                                    let iodnav = data.get("iodnav").unwrap();
+                                    assert_eq!(iodnav.as_f64(), Some(0.130000000000e+02));
+                                    let crs = data.get("crs").unwrap();
+                                    assert_eq!(crs.as_f64(), Some( 0.435937500000e+02));
+                                    let cis = data.get("cis").unwrap();
+                                    assert_eq!(cis.as_f64(), Some(0.409781932831e-07));
+                                    let omega_dot = data.get("omegaDot").unwrap();
+                                    assert_eq!(omega_dot.as_f64(), Some( -0.518200156545e-08));
+                                    let idot = data.get("idot").unwrap();
+                                    assert_eq!(idot.as_f64(), Some( -0.595381942905e-09));
+                                    let sisa = data.get("sisa").unwrap();
+                                    assert_eq!(sisa.as_f64(), Some(0.312000000000e+01));
+                                    let bgd =  data.get("bgdE5aE1").unwrap();
+                                    assert_eq!(bgd.as_f64(), Some( 0.232830643654e-09));
+                                },
+                                3 => {
+                                    assert_eq!(clk, -0.382520200219e-03);
+                                    assert_eq!(clk_dr,  -0.422062385041e-11);
+                                    assert_eq!(clk_drr, 0.0);
+                                    let iodnav = data.get("iodnav").unwrap();
+                                    assert_eq!(iodnav.as_f64(), Some(0.460000000000e+02));
+                                    let crs = data.get("crs").unwrap();
+                                    assert_eq!(crs.as_f64(), Some( -0.103750000000e+02));
+                                    let cis = data.get("cis").unwrap();
+                                    assert_eq!(cis.as_f64(), Some(0.745058059692e-08));
+                                    let omega_dot = data.get("omegaDot").unwrap();
+                                    assert_eq!(omega_dot.as_f64(), Some( -0.539986778331e-08));
+                                    let idot = data.get("idot").unwrap();
+                                    assert_eq!(idot.as_f64(), Some(0.701814947695e-09));
+                                    let sisa = data.get("sisa").unwrap();
+                                    assert_eq!(sisa.as_f64(), Some(0.312000000000e+01));
+                                    let bgd =  data.get("bgdE5aE1").unwrap();
+                                    assert_eq!(bgd.as_f64(), Some( 0.302679836750e-08));
+                                },
+                                _ => panic!("identified unexpected GAL vehicule \"{}\"", sv.prn)
+                            }
+                        },
+                        _ => panic!("falsely identified \"{}\"", sv.to_string())
+                    }
+                }
+            }
+            index += 1
+        }
+    }
     #[cfg(feature = "with-gzip")]
     use std::str::FromStr;
     #[test]
@@ -172,7 +331,6 @@ mod test {
         assert_eq!(record.is_some(), true);
         let record = record
             .unwrap();
-        println!("{:#?}", record);
         let mut index = 0;
         let expected_epochs : Vec<&str> = vec![
             "2021 01 01 00 00 00",
