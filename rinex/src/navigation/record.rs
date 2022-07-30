@@ -15,6 +15,7 @@ use crate::navigation::database;
 use crate::constellation::Constellation;
 use crate::navigation::database::NAV_MESSAGES;
 use crate::navigation::ionmessage;
+use crate::navigation::stomessage;
 
 /// `ComplexEnum` is record payload 
 #[derive(Clone, Debug)]
@@ -171,13 +172,12 @@ pub enum Frame {
     /// Rest of data is constellation dependent, see
     /// RINEX specifications or db/NAV/navigation.json.
     Eph(MsgType, Sv, f64, f64, f64, HashMap<String, ComplexEnum>),
-    /*
-    /// System Time Offset message
-    Sto(StoMessage),
-    /// Earth Orientation Parameters
+    /* /// Earth Orientation Parameters
     Eop(EopMessage), */
     /// Ionospheric Model Message
     Ion(ionmessage::Message),
+    /// System Time Offset Message
+    Sto(stomessage::Message),
 }
 
 impl Frame {
@@ -334,7 +334,35 @@ fn build_modern_record_entry (content: &str) ->
                 lines)?;
             (epoch, Frame::Eph(msg_type, sv, clk, clk_dr, clk_drr, map))
         },
-        FrameClass::SystemTimeOffset => panic!("sto not yet"),
+        FrameClass::SystemTimeOffset => {
+            let (epoch, rem) = line.split_at(23);
+            let (system, rem) = line.split_at(5);
+            let epoch = Epoch {
+                date: epoch::str2date(epoch.trim())?,
+                flag: epoch::EpochFlag::Ok,
+            };
+            let line = match lines.next() {
+                Some(l) => l,
+                _ => return Err(Error::MissingData),
+            };
+            let (time, rem) = line.split_at(23);
+            let (a0, rem) = rem.split_at(19);
+            let (a1, rem) = rem.split_at(19);
+            let (a2, rem) = rem.split_at(19);
+
+            let t_tm = f64::from_str(time.trim())?;
+            let msg = stomessage::Message {
+                system: system.trim().to_string(),
+                t_tm: t_tm as u32,
+                a: (
+                    f64::from_str(a0.trim())?,
+                    f64::from_str(a1.trim())?,
+                    f64::from_str(a2.trim())?,
+                ),
+                utc: rem.trim().to_string(),
+            };
+            (epoch, Frame::Sto(msg))
+        },
         FrameClass::EarthOrientation => panic!("eop not yet"),
         FrameClass::IonosphericModel => {
             let (epoch, msg): (epoch::Epoch, ionmessage::Message) = match msg_type {
