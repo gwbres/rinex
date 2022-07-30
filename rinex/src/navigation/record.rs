@@ -142,6 +142,10 @@ pub enum MsgType {
     FDMA,
     /// IFNV,
     IFNV,
+    /// D1
+    D1,
+    /// D2
+    D2,
     /// D1D2,
     D1D2,
     /// SBAS
@@ -268,6 +272,8 @@ pub enum Error {
     ParseFloatError(#[from] std::num::ParseFloatError),
     #[error("failed to parse epoch date")]
     ParseDateError(#[from] ParseDateError),
+    #[error("failed to identify class/type")]
+    StrumError(#[from] strum::ParseError), 
 }
 
 /// Builds `Record` entry for `NavigationData`
@@ -275,17 +281,63 @@ pub fn build_record_entry (version: Version, constell: Constellation, content: &
         Result<(Epoch, FrameClass, Frame), Error>
 {
     if content.starts_with(">") {
-        build_modern_record_entry(version, constell, content)
+        build_modern_record_entry(content)
     } else {
         build_v2_v3_record_entry(version, constell, content)
     }
 }
 
 /// Builds `Record` entry for Modern NAV frames
-fn build_modern_record_entry (version: Version, constell: Constellation, content: &str) ->
+fn build_modern_record_entry (content: &str) ->
         Result<(Epoch, FrameClass, Frame), Error>
 {
-    panic!("NAV4 : not yet")
+    let mut lines = content.lines();
+    let line = match lines.next() {
+        Some(l) => l,
+        _ => return Err(Error::MissingData),
+    };
+
+    let (marker, rem) = line.split_at(2);
+    let (frame_class, rem) = rem.split_at(4);
+    let (svnn, rem) = rem.split_at(4);
+
+    let frame_class = FrameClass::from_str(frame_class.trim())?;
+    let sv = Sv::from_str(svnn.trim())?;
+    let msg_type = MsgType::from_str(rem.trim())?;
+
+    let line = match lines.next() {
+        Some(l) => l,
+        _ => return Err(Error::MissingData),
+    };
+
+    let (epoch, fr): (epoch::Epoch, Frame) = match frame_class {
+        FrameClass::Ephemeris => {
+            let (svnn, rem) = line.split_at(4);
+            let sv = Sv::from_str(svnn.trim())?;
+            let (epoch, rem) = rem.split_at(20);
+            let epoch = epoch::Epoch {
+                date: epoch::str2date(epoch.trim())?,
+                flag: epoch::EpochFlag::Ok,
+            };
+
+            let (clk_bias, rem) = rem.split_at(19);
+            let (clk_dr, clk_drr) = rem.split_at(19);
+            let clk = f64::from_str(clk_bias.replace("D","E").trim())?;
+            let clk_dr = f64::from_str(clk_dr.replace("D","E").trim())?;
+            let clk_drr = f64::from_str(clk_drr.replace("D","E").trim())?;
+            println!("{:?} | {} {} {}", sv, clk, clk_dr, clk_drr);
+            let map = parse_complex_map(
+                Version { major: 4, minor: 0 },
+                sv.constellation,
+                lines)?;
+            (epoch, Frame::Eph(msg_type, sv, clk, clk_dr, clk_drr, map))
+        },
+        FrameClass::SystemTimeOffset => panic!("sto not yet"),
+        FrameClass::EarthOrientation => panic!("eop not yet"),
+        FrameClass::IonosphericModel => panic!("ion not yet"),
+    };
+
+    Ok((epoch, frame_class, fr))
 }
 
 /// Builds `Record` entry for Old NAV frames
@@ -306,14 +358,9 @@ fn build_v2_v3_record_entry (version: Version, constell: Constellation, content:
     };
 
     let (svnn, rem) = line.split_at(svnn_offset);
-    let date_offset = 20;
-    
-    let (date, rem) = rem.split_at(date_offset);
+    let (date, rem) = rem.split_at(20);
     let (clk_bias, rem) = rem.split_at(19);
     let (clk_dr, clk_drr) = rem.split_at(19);
-
-    println!("V2 V3 | 1ST LINE | SVNN \"{}\" DATE \"{}\" BIAS \"{}\" DRIFT \"{}\" DR \"{}\"",
-        svnn, date, clk_bias, clk_dr, clk_drr);
 
     let sv : Sv = match version.major {
         1|2 => {
@@ -403,8 +450,11 @@ fn parse_complex_map (version: Version, constell: Constellation, mut lines: std:
             line = rem.clone();
 
             if !k.contains(&"spare") { // --> got something to parse in db
-                let cplx = ComplexEnum::new(v, content.trim())?;
-                map.insert(k.to_string(), cplx);
+                if let Ok(cplx) = ComplexEnum::new(v, content.trim()) {
+                    // parsing did work,
+                    // data is provided
+                    map.insert(k.to_string(), cplx);
+                }
             }
 
             if total >= 76 {
@@ -416,7 +466,7 @@ fn parse_complex_map (version: Version, constell: Constellation, mut lines: std:
                     break
                 }
             }
-        } else { // early EOL
+        } else { // early EOL (blank)
             total = 0;
             new_line = true;
             if let Some(l) = lines.next() {
@@ -426,6 +476,7 @@ fn parse_complex_map (version: Version, constell: Constellation, mut lines: std:
             }
         }
     }
+    println!(""); // DEBUG!!
     Ok(map)
 }
 
