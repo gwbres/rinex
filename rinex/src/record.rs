@@ -267,41 +267,33 @@ pub fn build_record (reader: &mut BufferedReader, header: &header::Header) -> Re
                     match &header.rinex_type {
                         Type::NavigationData => {
                             if let Ok((e, class, fr)) = navigation::record::build_record_entry(header.version, header.constellation.unwrap(), &epoch_content) {
-                                if nav_rec.contains_key(&e) {
-                                    // <o 
-                                    // NAV epoch provides a unique Sv for a given epoch
-                                    // it is possible to return an already existing epoch (previously parsed)
-                                    // in case of `merged` RINEX
-                                    // --> retrieve previous epoch
-                                    // ---> append new `sv` data 
-                                    // let mut prev = nav_rec.remove(&e).unwrap(); // grab previous entry
-                                    // prev.insert(sv, map); // insert 
-                                    // nav_rec.insert(e, prev); // (re)insert
-                                } else {
-                                    // new epoch -> insert
-                                    // let mut sv_map : HashMap<sv::Sv, HashMap<String, navigation::record::ComplexEnum>> = HashMap::with_capacity(1);
-                                    // sv_map.insert(sv, map);
-                                    // nav_rec.insert(e, sv_map);
-                                };
+                                if let Some(e) = nav_rec.get_mut(&e) {
+                                    if let Some(frames) = e.get_mut(&class) {
+                                        // got already some frames, for this epoch and this message class
+                                        frames.push(fr);
+                                    } else {
+                                        let mut frames: Vec<navigation::record::Frame> = Vec::new();
+                                        frames.push(fr);
+                                        e.insert(class, frames);
+                                    }
+                                } else { // new epoch entry
+                                    let mut map: BTreeMap<navigation::record::FrameClass, Vec<navigation::record::Frame>> = BTreeMap::new();
+                                    let mut frames: Vec<navigation::record::Frame> = Vec::new();
+                                    frames.push(fr);
+                                    map.insert(class, frames);
+                                    nav_rec.insert(e, map);
+                                }
                                 comment_ts = e.clone(); // for comments classification & management
                             }
                         },
                         Type::ObservationData => {
                             if let Ok((e, ck_offset, map)) = observation::record::build_record_entry(&header, &epoch_content) {
-                                // <o 
-                                // OBS data provides all observations realized @ a given epoch
-                                // we should never face parsed epoch that were previously parsed
-                                // even in case of `merged` RINEX
                                 obs_rec.insert(e, (ck_offset, map));
                                 comment_ts = e.clone(); // for comments classification & management
                             }
                         },
                         Type::MeteoData => {
                             if let Ok((e, map)) = meteo::record::build_record_entry(&header, &epoch_content) {
-                                // <o 
-                                // OBS data provides all observations realized @ a given epoch
-                                // we should never face parsed epoch that were previously parsed
-                                // even in case of `merged` RINEX
                                 met_rec.insert(e, map);
                                 comment_ts = e.clone(); // for comments classification & management
                             }
@@ -309,7 +301,7 @@ pub fn build_record (reader: &mut BufferedReader, header: &header::Header) -> Re
                         Type::ClockData => {
                             if let Ok((epoch, system, dtype, data)) = clocks::record::build_record_entry(&epoch_content) {
                                 // Clocks `RINEX` files are handled a little different,
-                                // because we parse one line at a time, while we parsed one epoch at a time for other RINEXes.
+                                // because we parse one line at a time, while we parsed one (unique) epoch at a time other RINEXes.
                                 // One line may contribute to a previously existing epoch in the record 
                                 // (different type of measurements etc..etc..)
                                 if let Some(e) = clk_rec.get_mut(&epoch) {
@@ -382,11 +374,23 @@ pub fn build_record (reader: &mut BufferedReader, header: &header::Header) -> Re
     match &header.rinex_type {
         Type::NavigationData => {
             if let Ok((e, class, fr)) = navigation::record::build_record_entry(header.version, header.constellation.unwrap(), &epoch_content) {
-                /*let mut smap : HashMap<sv::Sv, HashMap<String, navigation::record::ComplexEnum>> = HashMap::with_capacity(1);
-                smap.insert(sv, map);
-                nav_rec.insert(e, smap);
-                comment_ts = e.clone(); // for comments classification + management
-                */
+                if let Some(e) = nav_rec.get_mut(&e) {
+                    if let Some(frames) = e.get_mut(&class) {
+                        // got already some frames, for this epoch and this message class
+                        frames.push(fr);
+                    } else {
+                        let mut frames: Vec<navigation::record::Frame> = Vec::new();
+                        frames.push(fr);
+                        e.insert(class, frames);
+                    }
+                } else { // new epoch entry
+                    let mut map: BTreeMap<navigation::record::FrameClass, Vec<navigation::record::Frame>> = BTreeMap::new();
+                    let mut frames: Vec<navigation::record::Frame> = Vec::new();
+                    frames.push(fr);
+                    map.insert(class, frames);
+                    nav_rec.insert(e, map);
+                }
+                comment_ts = e.clone(); // for comments classification & management
             }
         },
         Type::ObservationData => {

@@ -158,6 +158,7 @@ impl Default for MsgType {
 
 /// Navigation Frame for a given epoch
 #[derive(Debug, Clone)]
+#[derive(PartialEq)]
 #[derive(EnumString)]
 #[cfg_attr(feature = "with-serde", derive(Serialize))]
 pub enum Frame {
@@ -208,7 +209,7 @@ impl Frame {
 
 /// Navigation Record.
 /// Data is sorted by epoch, and by Frame class.
-pub type Record = BTreeMap<Epoch, BTreeMap<FrameClass, Frame>>;
+pub type Record = BTreeMap<Epoch, BTreeMap<FrameClass, Vec<Frame>>>;
 
 /// Returns true if given content matches the beginning of a 
 /// Navigation record epoch
