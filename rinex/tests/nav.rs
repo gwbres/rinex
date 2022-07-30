@@ -49,21 +49,103 @@ mod test {
                 for frame in frames.iter() {
                     let ephemeris = frame.as_eph();
                     assert_eq!(ephemeris.is_some(), true);
-                    let (msgtype, sv, clk_offset, clk_dr, clk_drr, data) = ephemeris.unwrap();
+                    let (msgtype, sv, clk, clk_dr, clk_drr, data) = ephemeris.unwrap();
                     assert_eq!(msgtype, MsgType::LNAV); // legacy NAV
                     assert_eq!(expected_vehicules.contains(&sv), true);            
                     if sv.prn == 1 {
-
+                        assert_eq!(clk, 7.282570004460E-5);
+                        assert_eq!(clk_dr, 0.0);
+                        assert_eq!(clk_drr, 7.380000000000E+04);
+                        let posx = data.get("satPosX").unwrap();
+                        assert_eq!(posx.as_f64(), Some(-1.488799804690E+03));
+                        let posy = data.get("satPosY").unwrap();
+                        assert_eq!(posy.as_f64(), Some( 1.292880712890E+04));
+                        let posz = data.get("satPosZ").unwrap();
+                        assert_eq!(posz.as_f64(), Some( 2.193169775390E+04));
+                        let health = data.get("health").unwrap();
+                        assert_eq!(health.as_f64(), Some(0.0));
+                        let freq = data.get("freqNum").unwrap();
+                        assert_eq!(freq.as_f64(), Some(1.0));
+                        let ageop = data.get("ageOp").unwrap();
+                        assert_eq!(ageop.as_f64(), Some(0.0));
                     } else if sv.prn == 2 {
-
-                    } else if sv.prn == 7 {
-
+                        assert_eq!(clk, 4.610531032090E-04);
+                        assert_eq!(clk_dr, 1.818989403550E-12);
+                        assert_eq!(clk_drr,  4.245000000000E+04);
+                        let posx = data.get("satPosX").unwrap();
+                        assert_eq!(posx.as_f64(), Some(-8.955041992190E+03));
+                        let posy = data.get("satPosY").unwrap();
+                        assert_eq!(posy.as_f64(), Some(-1.834875292970E+04));
+                        let posz = data.get("satPosZ").unwrap();
+                        assert_eq!(posz.as_f64(), Some( 1.536620703130E+04));
+                        let freq = data.get("freqNum").unwrap();
+                        assert_eq!(freq.as_f64(), Some(-4.0));
+                        let ageop = data.get("ageOp").unwrap();
+                        assert_eq!(ageop.as_f64(), Some(0.0));
                     } else if sv.prn == 3 {
-
+                        assert_eq!(clk, 2.838205546140E-05); 
+                        assert_eq!(clk_dr, 0.0); 
+                        assert_eq!(clk_drr, 4.680000000000E+04);
+                        let posx = data.get("satPosX").unwrap();
+                        assert_eq!(posx.as_f64(), Some(1.502522949220E+04));
+                        let posy = data.get("satPosY").unwrap();
+                        assert_eq!(posy.as_f64(), Some(-1.458877050780E+04));
+                        let posz = data.get("satPosZ").unwrap();
+                        assert_eq!(posz.as_f64(), Some( 1.455863281250E+04));
+                        let health = data.get("health").unwrap();
+                        assert_eq!(health.as_f64(), Some(0.0));
+                        let freq = data.get("freqNum").unwrap();
+                        assert_eq!(freq.as_f64(), Some(5.0));
+                        let ageop = data.get("ageOp").unwrap();
+                        assert_eq!(ageop.as_f64(), Some(0.0));
                     } else if sv.prn == 4 {
-
+                        assert_eq!(clk,  6.817653775220E-05);
+                        assert_eq!(clk_dr, 1.818989403550E-12);
+                        assert_eq!(clk_drr, 4.680000000000E+04);
+                        let posx = data.get("satPosX").unwrap();
+                        assert_eq!(posx.as_f64(), Some(-1.688173828130E+03));
+                        let posy = data.get("satPosY").unwrap();
+                        assert_eq!(posy.as_f64(), Some(-1.107156738280E+04));
+                        let posz = data.get("satPosZ").unwrap();
+                        assert_eq!(posz.as_f64(), Some( 2.293745361330E+04));
+                        let health = data.get("health").unwrap();
+                        assert_eq!(health.as_f64(), Some(0.0));
+                        let freq = data.get("freqNum").unwrap();
+                        assert_eq!(freq.as_f64(), Some(6.0));
+                        let ageop = data.get("ageOp").unwrap();
+                        assert_eq!(ageop.as_f64(), Some(0.0));
                     } else if sv.prn == 5 {
-
+                        assert_eq!(clk, 6.396882236000E-05);
+                        assert_eq!(clk_dr, 9.094947017730E-13);
+                        assert_eq!(clk_drr, 8.007000000000E+04); 
+                        let posx = data.get("satPosX").unwrap();
+                        assert_eq!(posx.as_f64(), Some( -1.754308935550E+04));
+                        let posy = data.get("satPosY").unwrap();
+                        assert_eq!(posy.as_f64(), Some(-1.481773437500E+03));
+                        let posz = data.get("satPosZ").unwrap();
+                        assert_eq!(posz.as_f64(), Some(  1.847386083980E+04));
+                        let health = data.get("health").unwrap();
+                        assert_eq!(health.as_f64(), Some(0.0));
+                        let freq = data.get("freqNum").unwrap();
+                        assert_eq!(freq.as_f64(), Some(1.0));
+                        let ageop = data.get("ageOp").unwrap();
+                        assert_eq!(ageop.as_f64(), Some(0.0));
+                    } else if sv.prn == 7 {
+                        assert_eq!(clk, -4.201009869580E-05);
+                        assert_eq!(clk_dr, 0.0);
+                        assert_eq!(clk_drr, 2.88E4);
+                        let posx = data.get("satPosX").unwrap();
+                        assert_eq!(posx.as_f64(), Some( 1.817068505860E+04)); 
+                        let posy = data.get("satPosY").unwrap();
+                        assert_eq!(posy.as_f64(), Some(1.594814404300E+04));
+                        let posz = data.get("satPosZ").unwrap();
+                        assert_eq!(posz.as_f64(), Some(8.090271484380E+03));
+                        let health = data.get("health").unwrap();
+                        assert_eq!(health.as_f64(), Some(0.0));
+                        let freq = data.get("freqNum").unwrap();
+                        assert_eq!(freq.as_f64(), Some(5.0));
+                        let ageop = data.get("ageOp").unwrap();
+                        assert_eq!(ageop.as_f64(), Some(0.0));
                     }
                 }
             }

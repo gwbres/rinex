@@ -300,23 +300,13 @@ fn build_v2_v3_record_entry (version: Version, constell: Constellation, content:
     
     let version_major = version.major;
     let svnn_offset :usize = match version.major {
-        1|2 => {
-            if constell == Constellation::Mixed { // not sure that even exists
-                4
-            } else {
-                3
-            }
-        },
-        3 => 4,
+        1|2 => 2, // Y
+        3 => 4, // XYY
         _ => unreachable!(),
     };
 
     let (svnn, rem) = line.split_at(svnn_offset);
-
-    let date_offset = match svnn_offset {
-        4 => 19,
-        _ => 20,
-    };
+    let date_offset = 20;
     
     let (date, rem) = rem.split_at(date_offset);
     let (clk_bias, rem) = rem.split_at(19);
