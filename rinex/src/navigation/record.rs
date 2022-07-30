@@ -274,6 +274,8 @@ pub enum Error {
     ParseDateError(#[from] ParseDateError),
     #[error("failed to identify class/type")]
     StrumError(#[from] strum::ParseError), 
+    #[error("failed to parse ION message")]
+    IonMessageError(#[from] ionmessage::Error),
 }
 
 /// Builds `Record` entry for `NavigationData`
@@ -334,7 +336,27 @@ fn build_modern_record_entry (content: &str) ->
         },
         FrameClass::SystemTimeOffset => panic!("sto not yet"),
         FrameClass::EarthOrientation => panic!("eop not yet"),
-        FrameClass::IonosphericModel => panic!("ion not yet"),
+        FrameClass::IonosphericModel => {
+            let (epoch, msg): (epoch::Epoch, ionmessage::Message) = match msg_type {
+                MsgType::IFNV => {
+                    let (epoch, model) = ionmessage::NgModel::parse(lines)?;
+                    (epoch, ionmessage::Message::NequickGModel(model))
+                },
+                _ => {
+                    match sv.constellation {
+                        Constellation::BeiDou => {
+                            let (epoch, model) = ionmessage::BdModel::parse(lines)?;
+                            (epoch, ionmessage::Message::BdgimModel(model))
+                        },
+                        _ => {
+                            let (epoch, model) = ionmessage::KbModel::parse(lines)?;
+                            (epoch, ionmessage::Message::KlobucharModel(model))
+                        },
+                    }
+                },
+            };
+            (epoch, Frame::Ion(msg))
+        },
     };
 
     Ok((epoch, frame_class, fr))
