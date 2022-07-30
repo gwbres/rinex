@@ -427,4 +427,45 @@
             "oadc": "f64"
         }
     }]
+},
+{
+    "constellation": "SBS",
+    "revisions": [{
+        "revision": {
+            "major": 3
+        },
+        "content": {
+            "satPosX": "f64",
+            "velX": "f64",
+            "accelX": "f64",
+            "health": "f64",
+            "satPosY": "f64",
+            "velY": "f64",
+            "accelY": "f64",
+            "accuracyCode": "f64",
+            "satPosZ": "f64",
+            "velZ": "f64",
+            "accelZ": "f64",
+            "iodn": "f64"
+        }
+    },
+    {
+        "revision": {
+            "major": 4
+        },
+        "content": {
+            "satPosX": "f64",
+            "velX": "f64",
+            "accelX": "f64",
+            "health": "f64",
+            "satPosY": "f64",
+            "velY": "f64",
+            "accelY": "f64",
+            "accuracyCode": "f64",
+            "satPosZ": "f64",
+            "velZ": "f64",
+            "accelZ": "f64",
+            "iodn": "f64"
+        }
+    }]
 }]

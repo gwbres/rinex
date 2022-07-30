@@ -121,7 +121,7 @@ impl Constellation {
             Constellation::Glonass => "GLO",
             Constellation::Galileo => "GAL",
             Constellation::BeiDou => "BDS",
-            Constellation::SBAS(_) => "GEO",
+            Constellation::SBAS(_) => "SBS",
             Constellation::QZSS => "QZS",
             Constellation::IRNSS => "IRN",
             Constellation::Mixed => "MIX",
