@@ -7,6 +7,12 @@ use std::str::FromStr;
 /// Model parsing error
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error("ng model missing 1st line")]
+    NgModelMissing1stLine,
+    #[error("kb model missing 1st line")]
+    KbModelMissing1stLine,
+    #[error("bd model missing 1st line")]
+    BdModelMissing1stLine,
     #[error("ng model missing 2nd line")]
     NgModelMissing2ndLine,
     #[error("kb model missing 2nd line")]
@@ -19,6 +25,10 @@ pub enum Error {
     BdModelMissing3rdLine,
     #[error("missing data fields")]
     MissingData,
+    #[error("failed to parse float data")]
+    ParseFloatError(#[from] std::num::ParseFloatError),
+    #[error("failed to parse date field")]
+    ParseDateError(#[from] epoch::ParseDateError),
 }
 
 /// Klobuchar Parameters region
@@ -59,45 +69,24 @@ impl KbModel {
     pub fn parse (mut lines: std::str::Lines<'_>) -> Result<(epoch::Epoch, Self), Error> {
         let line = match lines.next() {
             Some(l) => l,
-            _ => return Err(Error::NgModelMissing2ndLine)
+            _ => return Err(Error::NgModelMissing1stLine)
         };
-        if line.len() < 23 {
-            return Err(Error::MissingData)
-        }
         let (epoch, rem) = line.split_at(23);
-        if rem.len() < 19 {
-            return Err(Error::MissingData)
-        }
         let (a0, rem) = rem.split_at(19);
-        if rem.len() < 19 {
-            return Err(Error::MissingData)
-        }
         let (a1, a2) = rem.split_at(19);
         
         let line = match lines.next() {
             Some(l) => l,
             _ => return Err(Error::KbModelMissing2ndLine)
         };
-        if line.len() < 23 {
-            return Err(Error::MissingData)
-        }
         let (a3, rem) = line.split_at(23);
-        if rem.len() < 19 {
-            return Err(Error::MissingData)
-        }
         let (b0, rem) = rem.split_at(19);
-        if rem.len() < 19 {
-            return Err(Error::MissingData)
-        }
         let (b1, b2) = rem.split_at(19);
 
         let line = match lines.next() {
             Some(l) => l,
             _ => return Err(Error::KbModelMissing3rdLine)
         };
-        if line.len() < 23 {
-            return Err(Error::MissingData)
-        }
         let (b3, region) = line.split_at(23);
 
         let region: KbRegionCode = match region.trim().len() {
@@ -116,35 +105,29 @@ impl KbModel {
             },
         };
 
-        if let Ok(date) = epoch::str2date(epoch.trim()) {
-            if let Ok(a0) = f64::from_str(a0.trim()) {
-                if let Ok(a1) = f64::from_str(a1.trim()) {
-                    if let Ok(a2) = f64::from_str(a2.trim()) {
-                        if let Ok(a3) = f64::from_str(a3.trim()) {
-                            if let Ok(b0) = f64::from_str(b0.trim()) {
-                                if let Ok(b1) = f64::from_str(b1.trim()) {
-                                    if let Ok(b2) = f64::from_str(b2.trim()) {
-                                        if let Ok(b3) = f64::from_str(b3.trim()) {
-                                            return Ok((
-                                                epoch::Epoch {
-                                                    date,
-                                                    flag: epoch::EpochFlag::Ok,
-                                                },
-                                                Self {
-                                                    alpha: (a0,a1,a2,a3),
-                                                    beta: (b0,b1,b2,b3),
-                                                    region,
-                                                }))
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        Err(Error::MissingData)
+        let date = epoch::str2date(epoch.trim())?;
+        let alpha = (
+            f64::from_str(a0.trim()).unwrap_or(0.0_f64),
+            f64::from_str(a1.trim()).unwrap_or(0.0_f64),
+            f64::from_str(a2.trim()).unwrap_or(0.0_f64),
+            f64::from_str(a3.trim()).unwrap_or(0.0_f64),
+        );
+        let beta = (
+            f64::from_str(b0.trim()).unwrap_or(0.0_f64),
+            f64::from_str(b1.trim()).unwrap_or(0.0_f64),
+            f64::from_str(b2.trim()).unwrap_or(0.0_f64),
+            f64::from_str(b3.trim()).unwrap_or(0.0_f64),
+        );
+
+        Ok((epoch::Epoch {
+            date,
+            flag: epoch::EpochFlag::Ok,
+        },
+        Self {
+            alpha,
+            beta,
+            region,
+        }))
     }
 }
 
@@ -177,48 +160,32 @@ impl NgModel {
     pub fn parse(mut lines: std::str::Lines<'_>) -> Result<(epoch::Epoch, Self), Error> {
         let line = match lines.next() {
             Some(l) => l,
-            _ => return Err(Error::NgModelMissing2ndLine)
+            _ => return Err(Error::NgModelMissing1stLine)
         };
-        if line.len() < 23 {
-            return Err(Error::MissingData)
-        }
         let (epoch, rem) = line.split_at(23);
-        if rem.len() < 19 {
-            return Err(Error::MissingData)
-        }
         let (a0, rem) = rem.split_at(19);
-        if rem.len() < 19 {
-            return Err(Error::MissingData)
-        }
         let (a1, rem) = rem.split_at(19);
+        
         let line = match lines.next() {
             Some(l) => l,
             _ => return Err(Error::NgModelMissing2ndLine)
         };
-        if line.len() < 23 {
-            return Err(Error::MissingData)
-        }
-        if let Ok(date) = epoch::str2date(epoch.trim()) {
-            if let Ok(a0) = f64::from_str(a0.trim()) {
-                if let Ok(a1) = f64::from_str(a1.trim()) {
-                    if let Ok(a2) = f64::from_str(rem.trim()) {
-                        if let Ok(f) = f64::from_str(line.trim()) {
-                            return Ok((
-                                epoch::Epoch {
-                                    date,
-                                    flag: epoch::EpochFlag::Ok,
-                                },
-                                Self {
-                                    a: (a0,a1,a2),
-                                    region: NgRegionFlags::from_bits(f as u16).unwrap_or(NgRegionFlags::empty()),
-                                }
-                            ))
-                        }
-                    }
-                }
-            }
-        }
-        Err(Error::MissingData)
+        
+        let date = epoch::str2date(epoch.trim())?;
+        let a = (
+            f64::from_str(a0.trim())?,
+            f64::from_str(a1.trim())?,
+            f64::from_str(rem.trim())?,
+        );
+        let f = f64::from_str(line.trim())?;
+        Ok((epoch::Epoch {
+            date,
+            flag: epoch::EpochFlag::Ok,
+        },
+        Self {
+            a,
+            region: NgRegionFlags::from_bits(f as u16).unwrap_or(NgRegionFlags::empty()),
+        }))
     }
 }
 
@@ -236,16 +203,10 @@ impl BdModel {
     pub fn parse (mut lines: std::str::Lines<'_>) -> Result<(epoch::Epoch, Self), Error> {
         let line = match lines.next() {
             Some(l) => l,
-            _ => return Err(Error::BdModelMissing2ndLine)
+            _ => return Err(Error::BdModelMissing1stLine)
         };
         let (epoch, rem) = line.split_at(23);
-        if rem.len() < 19 {
-            return Err(Error::MissingData)
-        }
         let (a0, rem) = rem.split_at(19);
-        if rem.len() < 19 {
-            return Err(Error::MissingData)
-        }
         let (a1, a2) = rem.split_at(19);
         
         let line = match lines.next() {
@@ -253,51 +214,34 @@ impl BdModel {
             _ => return Err(Error::KbModelMissing2ndLine)
         };
         let (a3, rem) = line.split_at(23);
-        if rem.len() < 19 {
-            return Err(Error::MissingData)
-        }
         let (a4, rem) = rem.split_at(19);
-        if rem.len() < 19 {
-            return Err(Error::MissingData)
-        }
         let (a5, a6) = rem.split_at(19);
         
         let line = match lines.next() {
             Some(l) => l,
-            _ => return Err(Error::KbModelMissing2ndLine)
+            _ => return Err(Error::KbModelMissing3rdLine)
         };
-        let (a7, rem) = rem.split_at(23);
-        if rem.len() < 19 {
-            return Err(Error::MissingData)
-        }
-        if let Ok(a0) = f64::from_str(a0.trim()) {
-            if let Ok(a1) = f64::from_str(a1.trim()) {
-                if let Ok(a2) = f64::from_str(a2.trim()) {
-                    if let Ok(a3) = f64::from_str(a3.trim()) {
-                        if let Ok(a4) = f64::from_str(a4.trim()) {
-                            if let Ok(a5) = f64::from_str(a5.trim()) {
-                                if let Ok(a6) = f64::from_str(a6.trim()) {
-                                    if let Ok(a7) = f64::from_str(a7.trim()) {
-                                        if let Ok(a8) = f64::from_str(rem.trim()) {
-                                            if let Ok(date) = epoch::str2date(epoch.trim()) {
-                                                return Ok((epoch::Epoch {
-                                                    date,
-                                                    flag: epoch::EpochFlag::Ok,
-                                                },
-                                                Self {
-                                                    alpha: (a0,a1,a2,a3,a4,a5,a6,a7,a8), 
-                                                }))
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        Err(Error::MissingData)
+        let (a7, a8) = rem.split_at(23);
+        
+        let date = epoch::str2date(epoch.trim())?;
+        let alpha = (
+            f64::from_str(a0.trim()).unwrap_or(0.0_f64),
+            f64::from_str(a1.trim()).unwrap_or(0.0_f64),
+            f64::from_str(a2.trim()).unwrap_or(0.0_f64),
+            f64::from_str(a3.trim()).unwrap_or(0.0_f64),
+            f64::from_str(a4.trim()).unwrap_or(0.0_f64),
+            f64::from_str(a5.trim()).unwrap_or(0.0_f64),
+            f64::from_str(a6.trim()).unwrap_or(0.0_f64),
+            f64::from_str(a7.trim()).unwrap_or(0.0_f64),
+            f64::from_str(a8.trim()).unwrap_or(0.0_f64),
+        );
+        Ok((epoch::Epoch {
+            date,
+            flag: epoch::EpochFlag::Ok,
+        },
+        Self {
+            alpha
+        }))
     }
 }
 
