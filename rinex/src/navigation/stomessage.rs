@@ -9,7 +9,8 @@ pub struct Message {
     /// Time system
     pub system: String,
     pub utc: String,
-    /// Transmission time of message, [s] of GNSS week
+    /// Message transmmission time [s] of GNSS week
     pub t_tm: u32,
+    /// ([sec], [sec.sec⁻¹], [sec.sec⁻²])
     pub a: (f64,f64,f64),
 }

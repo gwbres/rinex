@@ -16,6 +16,7 @@ use crate::constellation::Constellation;
 use crate::navigation::database::NAV_MESSAGES;
 use crate::navigation::ionmessage;
 use crate::navigation::stomessage;
+use crate::navigation::eopmessage;
 
 /// `ComplexEnum` is record payload 
 #[derive(Clone, Debug)]
@@ -147,7 +148,7 @@ pub enum MsgType {
     D1,
     /// D2
     D2,
-    /// D1D2,
+    /// D1D2
     D1D2,
     /// SBAS
     SBAS,
@@ -172,8 +173,8 @@ pub enum Frame {
     /// Rest of data is constellation dependent, see
     /// RINEX specifications or db/NAV/navigation.json.
     Eph(MsgType, Sv, f64, f64, f64, HashMap<String, ComplexEnum>),
-    /* /// Earth Orientation Parameters
-    Eop(EopMessage), */
+    /// Earth Orientation Parameters message 
+    Eop(eopmessage::Message),
     /// Ionospheric Model Message
     Ion(ionmessage::Message),
     /// System Time Offset Message
@@ -188,7 +189,7 @@ impl Frame {
             _ => None,
         }
     }
-    /// Unwraps self as Ephemeris frame
+    /// Unwraps self as mutable Ephemeris frame reference
     pub fn as_mut_eph (&mut self) -> Option<(MsgType, Sv, f64, f64, f64, &HashMap<String, ComplexEnum>)> {
         match self {
             Self::Eph(msg, sv, clk, clk_dr, clk_drr, map) => Some((*msg, *sv, *clk, *clk_dr, *clk_drr, map)),
@@ -202,10 +203,24 @@ impl Frame {
             _ => None,
         }
     }
-    /// Unwraps self as Ionospheric Model frame
+    /// Unwraps self as mutable Ionospheric Model frame reference
     pub fn as_mut_ion (&mut self) -> Option<&mut ionmessage::Message> {
         match self {
             Self::Ion(fr) => Some(fr),
+            _ => None,
+        }
+    }
+    /// Unwraps self as Earth Orientation frame
+    pub fn as_eop (&self) -> Option<&eopmessage::Message> {
+        match self {
+            Self::Eop(fr) => Some(fr),
+            _ => None,
+        }
+    }
+    /// Unwraps self as Mutable Earth Orientation frame reference
+    pub fn as_mut_eop (&mut self) -> Option<&mut eopmessage::Message> {
+        match self {
+            Self::Eop(fr) => Some(fr),
             _ => None,
         }
     }
@@ -276,6 +291,8 @@ pub enum Error {
     StrumError(#[from] strum::ParseError), 
     #[error("failed to parse ION message")]
     IonMessageError(#[from] ionmessage::Error),
+    #[error("failed to parse EOP message")]
+    EopMessageError(#[from] eopmessage::Error),
 }
 
 /// Builds `Record` entry for `NavigationData`
@@ -307,13 +324,13 @@ fn build_modern_record_entry (content: &str) ->
     let sv = Sv::from_str(svnn.trim())?;
     let msg_type = MsgType::from_str(rem.trim())?;
 
-    let line = match lines.next() {
-        Some(l) => l,
-        _ => return Err(Error::MissingData),
-    };
-
     let (epoch, fr): (epoch::Epoch, Frame) = match frame_class {
         FrameClass::Ephemeris => {
+            let line = match lines.next() {
+                Some(l) => l,
+                _ => return Err(Error::MissingData),
+            };
+            
             let (svnn, rem) = line.split_at(4);
             let sv = Sv::from_str(svnn.trim())?;
             let (epoch, rem) = rem.split_at(20);
@@ -327,7 +344,7 @@ fn build_modern_record_entry (content: &str) ->
             let clk = f64::from_str(clk_bias.replace("D","E").trim())?;
             let clk_dr = f64::from_str(clk_dr.replace("D","E").trim())?;
             let clk_drr = f64::from_str(clk_drr.replace("D","E").trim())?;
-            println!("{:?} | {} {} {}", sv, clk, clk_dr, clk_drr);
+            println!("EPH {:?} | {} {} {}", sv, clk, clk_dr, clk_drr);
             let map = parse_complex_map(
                 Version { major: 4, minor: 0 },
                 sv.constellation,
@@ -335,6 +352,11 @@ fn build_modern_record_entry (content: &str) ->
             (epoch, Frame::Eph(msg_type, sv, clk, clk_dr, clk_drr, map))
         },
         FrameClass::SystemTimeOffset => {
+            let line = match lines.next() {
+                Some(l) => l,
+                _ => return Err(Error::MissingData),
+            };
+            
             let (epoch, rem) = line.split_at(23);
             let (system, rem) = line.split_at(5);
             let epoch = Epoch {
@@ -355,22 +377,25 @@ fn build_modern_record_entry (content: &str) ->
                 system: system.trim().to_string(),
                 t_tm: t_tm as u32,
                 a: (
-                    f64::from_str(a0.trim())?,
-                    f64::from_str(a1.trim())?,
-                    f64::from_str(a2.trim())?,
+                    f64::from_str(a0.trim()).unwrap_or(0.0_f64),
+                    f64::from_str(a1.trim()).unwrap_or(0.0_f64),
+                    f64::from_str(a2.trim()).unwrap_or(0.0_f64),
                 ),
                 utc: rem.trim().to_string(),
             };
             (epoch, Frame::Sto(msg))
         },
-        FrameClass::EarthOrientation => panic!("eop not yet"),
+        FrameClass::EarthOrientation => {
+            let (epoch, msg) = eopmessage::Message::parse(lines)?;
+            (epoch, Frame::Eop(msg))
+        },
         FrameClass::IonosphericModel => {
             let (epoch, msg): (epoch::Epoch, ionmessage::Message) = match msg_type {
                 MsgType::IFNV => {
                     let (epoch, model) = ionmessage::NgModel::parse(lines)?;
                     (epoch, ionmessage::Message::NequickGModel(model))
                 },
-                _ => {
+                MsgType::CNVX => {
                     match sv.constellation {
                         Constellation::BeiDou => {
                             let (epoch, model) = ionmessage::BdModel::parse(lines)?;
@@ -382,6 +407,10 @@ fn build_modern_record_entry (content: &str) ->
                         },
                     }
                 },
+                _ => {
+                    let (epoch, model) = ionmessage::KbModel::parse(lines)?;
+                    (epoch, ionmessage::Message::KlobucharModel(model))
+                }
             };
             (epoch, Frame::Ion(msg))
         },
